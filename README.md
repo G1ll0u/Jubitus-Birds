@@ -6,7 +6,7 @@ Client only 1.12.2 mod that adds birds flying in the sky
 - One texture for the moment (swallow bird)
 - They have different flying behaviors
 - Very configurable in forge mod options
-
+- Should work with Optifine shaders
 
 
 https://github.com/user-attachments/assets/c9b12ca7-5c71-4bfd-8111-ad692b8ce9eb
