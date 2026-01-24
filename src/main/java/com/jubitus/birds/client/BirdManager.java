@@ -17,12 +17,16 @@ import net.minecraftforge.fml.common.gameevent.TickEvent;
 import java.util.*;
 
 public class BirdManager {
-
+    public static BirdManager INSTANCE;
     private final Map<Long, ClientBird> birdsById = new HashMap<>();
 
     // Flocking support
     private final Map<Long, Flock> flocksById = new HashMap<>();
     private final SpatialHash spatial = new SpatialHash(24);
+
+    public BirdManager() {
+        INSTANCE = this;
+    }
 
     @SubscribeEvent
     public void onClientTick(TickEvent.ClientTickEvent e) {
@@ -95,11 +99,11 @@ public class BirdManager {
         int cellZ = floorDiv(pz, cell);
 
         int radiusCells = JubitusBirdsConfig.SPAWNING.spawnRadiusCells;
-        double flockChance = JubitusBirdsConfig.SPAWNING.flockChancePerCell;
 
         FlockSpawner.SpawnResult sr = FlockSpawner.spawnForCells(
-                world, player, worldSeed, dim, window, cellX, cellZ, radiusCells, flockChance
+                world, player, worldSeed, dim, window, cellX, cellZ, radiusCells
         );
+
 
         // Keep / add flock objects
         flocksById.putAll(sr.flocks);
@@ -138,4 +142,9 @@ public class BirdManager {
         if ((a ^ b) < 0 && (r * b != a)) r--;
         return r;
     }
+    public void clearAllBirds() {
+        birdsById.clear();
+        flocksById.clear();
+    }
+
 }

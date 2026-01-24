@@ -1,0 +1,52 @@
+{
+  "name": "swallow",
+  "enabled": true,
+
+
+
+  "spawnWeight": 1.0,
+  "birdsPerCellMax": 8,
+  "flockChancePerCell": 0.45,
+  "flockMin": 3,
+  "flockMax": 10,
+
+  "bigFlockChanceDay": 0.35,
+  "bigFlockChanceNight": 0.10,
+  "bigFlockMin": 15,
+  "bigFlockMax": 40,
+
+  "biomeWhitelist": [],
+  "biomeBlacklist": ["hell", "minecraft:sky"],
+
+  "canSpawnAtDay": true,
+  "canSpawnAtNight": true,
+
+  "minSpeed": 0.35,
+  "maxSpeed": 0.60,
+
+  "day": { "spawnWeight": 1.5, "preferredAboveGround": 60.0 },
+  "night": { "spawnWeight": 0.2, "minSpeed": 0.15, "maxSpeed": 0.30, "preferredAboveGround": 30.0 },
+
+  "maxTurnDegPerTick": 4.0,
+  "noiseStrength": 0.04,
+
+  "minAltitudeAboveGround": 24.0,
+  "maxAltitudeAboveGround": 96.0,
+  "preferredAboveGround": 48.0,
+  "verticalAdjustStrength": 0.004,
+
+  "glideMinTicks": 60,
+  "glideMaxTicks": 140,
+  "circleMinTicks": 80,
+  "circleMaxTicks": 220,
+
+  "circleRadiusMin": 16.0,
+  "circleRadiusMax": 64.0,
+
+  "patternWeightGlide": 0.55,
+  "patternWeightCircle": 0.45,
+
+  "scale": 0.45,
+  "flapAmplitude": 0.08,
+  "flapSpeed": 0.35
+}

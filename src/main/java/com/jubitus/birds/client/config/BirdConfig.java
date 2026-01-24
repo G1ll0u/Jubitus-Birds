@@ -1,47 +1,24 @@
 package com.jubitus.birds.client.config;
 
 /**
- * Runtime cache used by your flight / spawn code.
- * Values are copied from the Forge @Config-backed JubitusBirdsConfig so changes apply in-game.
+ * Runtime cache used by your spawn manager.
+ * Values are copied from Forge @Config-backed JubitusBirdsConfig so GUI changes apply in-game.
+ *
+ * NOTE: All bird/species behavior is now configured per-species via /config/jubitusbirds/<species>/properties.json
  */
 public class BirdConfig {
 
-    // Border logic (in blocks)
+    // Borders
     public static double spawnBorderBuffer = 16.0;
     public static double despawnBorderBuffer = 32.0;
     public static int maxBirdsAroundPlayer = 32;
 
-    // Spawning
+    // Spawning system (global)
     public static int spawnCellSize = 128;
-    public static int birdsPerCellMax = 8;
     public static int spawnTimeWindowTicks = 20 * 30;
-
-    public static double flockChancePerCell = 0.45;
     public static int spawnRadiusCells = 2;
 
-    // Altitude
-    public static double minAltitudeAboveGround = 24.0;
-    public static double maxAltitudeAboveGround = 96.0;
-    public static double preferredAboveGround = 48.0;
-    public static double verticalAdjustStrength = 0.004;
-
-    // Flight feel
-    public static double minSpeed = 0.35;
-    public static double maxSpeed = 0.6;
-    public static double maxTurnDegPerTick = 4.0;
-    public static double noiseStrength = 0.04;
-
-    // Behavior timing
-    public static int glideMinTicks = 60;
-    public static int glideMaxTicks = 140;
-    public static int circleMinTicks = 80;
-    public static int circleMaxTicks = 220;
-
-    // Circling
-    public static double circleRadiusMin = 16.0;
-    public static double circleRadiusMax = 64.0;
-
-    // Despawn distance (legacy/optional)
+    // Legacy/optional
     public static double despawnDistance = 256.0;
 
     public static void reloadFromGuiConfig() {
@@ -51,45 +28,14 @@ public class BirdConfig {
         maxBirdsAroundPlayer = JubitusBirdsConfig.BORDERS.maxBirdsAroundPlayer;
         despawnDistance = JubitusBirdsConfig.BORDERS.despawnDistance;
 
-        // Spawning
+        // Spawning system
         spawnCellSize = JubitusBirdsConfig.SPAWNING.spawnCellSize;
-        birdsPerCellMax = JubitusBirdsConfig.SPAWNING.birdsPerCellMax;
         spawnTimeWindowTicks = JubitusBirdsConfig.SPAWNING.spawnTimeWindowTicks;
-
-        flockChancePerCell = JubitusBirdsConfig.SPAWNING.flockChancePerCell;
         spawnRadiusCells = JubitusBirdsConfig.SPAWNING.spawnRadiusCells;
 
-        // Altitude
-        minAltitudeAboveGround = JubitusBirdsConfig.ALTITUDE.minAltitudeAboveGround;
-        maxAltitudeAboveGround = JubitusBirdsConfig.ALTITUDE.maxAltitudeAboveGround;
-        preferredAboveGround = JubitusBirdsConfig.ALTITUDE.preferredAboveGround;
-        verticalAdjustStrength = JubitusBirdsConfig.ALTITUDE.verticalAdjustStrength;
-
-        // Flight
-        minSpeed = JubitusBirdsConfig.FLIGHT.minSpeed;
-        maxSpeed = JubitusBirdsConfig.FLIGHT.maxSpeed;
-        maxTurnDegPerTick = JubitusBirdsConfig.FLIGHT.maxTurnDegPerTick;
-        noiseStrength = JubitusBirdsConfig.FLIGHT.noiseStrength;
-
-        // Behavior
-        glideMinTicks = JubitusBirdsConfig.BEHAVIOR.glideMinTicks;
-        glideMaxTicks = JubitusBirdsConfig.BEHAVIOR.glideMaxTicks;
-        circleMinTicks = JubitusBirdsConfig.BEHAVIOR.circleMinTicks;
-        circleMaxTicks = JubitusBirdsConfig.BEHAVIOR.circleMaxTicks;
-
-        // Circling
-        circleRadiusMin = JubitusBirdsConfig.CIRCLING.circleRadiusMin;
-        circleRadiusMax = JubitusBirdsConfig.CIRCLING.circleRadiusMax;
-
         // Safety clamps
-        if (glideMaxTicks < glideMinTicks) glideMaxTicks = glideMinTicks;
-        if (circleMaxTicks < circleMinTicks) circleMaxTicks = circleMinTicks;
-        if (maxSpeed < minSpeed) maxSpeed = minSpeed;
-        if (maxAltitudeAboveGround < minAltitudeAboveGround) maxAltitudeAboveGround = minAltitudeAboveGround;
-        if (circleRadiusMax < circleRadiusMin) circleRadiusMax = circleRadiusMin;
-
-        // Clamp flock chance too (just in case)
-        if (Double.isNaN(flockChancePerCell)) flockChancePerCell = 0.45;
-        flockChancePerCell = Math.max(0.0, Math.min(1.0, flockChancePerCell));
+        if (spawnCellSize < 16) spawnCellSize = 16;
+        if (spawnTimeWindowTicks < 1) spawnTimeWindowTicks = 1;
+        if (spawnRadiusCells < 0) spawnRadiusCells = 0;
     }
 }

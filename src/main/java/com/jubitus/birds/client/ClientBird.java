@@ -4,12 +4,15 @@ import com.jubitus.birds.client.config.BirdConfig;
 import com.jubitus.birds.client.util.BirdOrientation;
 import com.jubitus.birds.client.util.BirdSteering;
 import com.jubitus.birds.client.util.FlockingRules;
+import com.jubitus.birds.species.BirdSpecies;
+import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.math.*;
 import net.minecraft.world.World;
 
 import java.util.Random;
 
 public class ClientBird {
+
 
 
     private static final double MAX_CLIMB_PER_TICK = 0.20; // blocks/tick, how fast it can "pull up" to avoid collision
@@ -36,9 +39,14 @@ public class ClientBird {
     private final long birdSeed;
     private final Random rng;
 
-    public int textureIndex = 0;
+    public final BirdSpecies species;
+
     public long flockId = 0L;
     public final BirdOrientation orientation = new BirdOrientation();
+
+    // Deterministic chosen texture for this bird
+    public final ResourceLocation texture;
+
 
     public Vec3d prevPos;
 
@@ -48,7 +56,8 @@ public class ClientBird {
     // used for banking (roll)
     private Vec3d lastForwardXZ = new Vec3d(0, 0, 1);
 
-    public ClientBird(World world, long birdSeed, Vec3d startPos, Vec3d initialDir, double speed) {
+    public ClientBird(World world, BirdSpecies species, long birdSeed, Vec3d startPos, Vec3d initialDir, double speed) {
+        this.species = species;
         this.birdSeed = birdSeed;
         this.rng = new Random(birdSeed);
 
@@ -56,8 +65,13 @@ public class ClientBird {
         this.forward = initialDir.normalize();
         this.vel = this.forward.scale(speed);
 
+        // pick deterministic texture variation for this bird
+        this.texture = (species != null) ? species.pickTexture(birdSeed) : null;
+
         pickNewMode(world, true);
     }
+
+
 
     public void tick(World world, Vec3d flockForward, java.util.List<ClientBird> neighbors) {
         if (world == null) return;
@@ -69,6 +83,9 @@ public class ClientBird {
 
 
         ageTicks++;
+        boolean isDay = world.isDaytime();
+        BirdSpecies.BirdSpeciesView v = species.viewForTime(isDay);
+
         // If too far from camera/player -> allow manager to remove
         // (manager handles removal; we don’t do it here)
 
@@ -105,8 +122,7 @@ public class ClientBird {
 
 
         // Add subtle deterministic “wander”
-        double noise = BirdConfig.noiseStrength;
-
+        double noise = v.noiseStrength();
 // Flocks should wander much less or they won't look cohesive.
         if (flockId != 0L) noise *= 0.20;
 
@@ -118,7 +134,7 @@ public class ClientBird {
 
 
         // Smooth turning: rotate current forward toward desired with turn limit
-        double maxTurnRad = Math.toRadians(BirdConfig.maxTurnDegPerTick);
+        double maxTurnRad = Math.toRadians(v.maxTurnDegPerTick());
         forward = BirdSteering.limitTurnXZ(forward, desiredDir, maxTurnRad);
 
 
@@ -147,12 +163,12 @@ public class ClientBird {
         double maxUp = (pos.y < requiredMinY) ? 0.09 : 0.06;
         double maxDown = 0.06;
 
-        double desiredVy = clamp(yError * BirdConfig.verticalAdjustStrength, -maxDown, maxUp);
+        double desiredVy = clamp(yError * v.verticalAdjustStrength(), -maxDown, maxUp);
 
 // Obstacle avoidance (trees/cliffs directly ahead): keep it gentle
         Vec3d avoid = obstacleAvoidance(world);
         if (avoid != null) {
-            double maxTurnRadAvoid = Math.toRadians(BirdConfig.maxTurnDegPerTick * 1.25);
+            double maxTurnRadAvoid = Math.toRadians(v.maxTurnDegPerTick() * 1.25);
             forward = BirdSteering.limitTurnXZ(forward, avoid, maxTurnRadAvoid);
 
             // Only request extra climb if we are near/under the floor.
@@ -172,8 +188,9 @@ public class ClientBird {
         // Speed varies slightly by mode
         double speed = vel.length();
         double targetSpeed = (mode == Mode.CIRCLE)
-                ? lerp(BirdConfig.minSpeed, BirdConfig.maxSpeed, 0.35)
-                : lerp(BirdConfig.minSpeed, BirdConfig.maxSpeed, 0.65);
+                ? lerp(v.minSpeed(), v.maxSpeed(), 0.35)
+                : lerp(v.minSpeed(), v.maxSpeed(), 0.65);
+
 
         speed = lerp(speed, targetSpeed, 0.03);
 
@@ -254,13 +271,19 @@ public class ClientBird {
 
     private void pickNewMode(World world, boolean first) {
         // Slight preference to glide
-        boolean chooseCircle = rng.nextDouble() < 0.45;
+        double wG = species.patternWeightGlide;
+        double wC = species.patternWeightCircle;
+        double sum = wG + wC;
+        double r = rng.nextDouble() * sum;
+        boolean chooseCircle = (r >= wG);
+
 
         if (chooseCircle) {
             mode = Mode.CIRCLE;
-            modeTicksLeft = randInt(BirdConfig.circleMinTicks, BirdConfig.circleMaxTicks);
+            BirdSpecies.BirdSpeciesView v = species.viewForTime(world.isDaytime());
+            modeTicksLeft = randInt(v.circleMinTicks(), v.circleMaxTicks());
+            circleRadius = lerp(v.circleRadiusMin(), v.circleRadiusMax(), rng.nextDouble());
 
-            circleRadius = lerp(BirdConfig.circleRadiusMin, BirdConfig.circleRadiusMax, rng.nextDouble());
 
             // Circle center near current position, offset a bit
             double ang = rng.nextDouble() * Math.PI * 2;
@@ -270,14 +293,16 @@ public class ClientBird {
             circleCenter = new Vec3d(pos.x + dx, pos.y, pos.z + dz);
         } else {
             mode = Mode.GLIDE;
-            modeTicksLeft = randInt(BirdConfig.glideMinTicks, BirdConfig.glideMaxTicks);
+            BirdSpecies.BirdSpeciesView v = species.viewForTime(world.isDaytime());
+            modeTicksLeft = randInt(v.glideMinTicks(), v.glideMaxTicks());
             pickGlideWaypoint(world);
         }
 
         // First time: ensure we don’t immediately dive
         if (first) {
             double gy = getGroundY(world, pos.x, pos.z);
-            double minY = gy + BirdConfig.minAltitudeAboveGround;
+            BirdSpecies.BirdSpeciesView v = species.viewForTime(world.isDaytime());
+            double minY = gy + v.minAltitudeAboveGround();
             if (pos.y < minY) pos = new Vec3d(pos.x, minY, pos.z);
         }
     }
@@ -291,8 +316,9 @@ public class ClientBird {
         double wz = pos.z + Math.sin(ang) * dist;
 
         double gy = getGroundY(world, wx, wz);
-        double targetAbove = lerp(BirdConfig.preferredAboveGround - 15, BirdConfig.preferredAboveGround + 15, rng.nextDouble());
-        double wy = gy + clamp(targetAbove, BirdConfig.minAltitudeAboveGround, BirdConfig.maxAltitudeAboveGround);
+        BirdSpecies.BirdSpeciesView v = species.viewForTime(world.isDaytime());
+        double targetAbove = lerp(v.preferredAboveGround() - 15, v.preferredAboveGround() + 15, rng.nextDouble());
+        double wy = gy + clamp(targetAbove, v.minAltitudeAboveGround(), v.maxAltitudeAboveGround());
 
         waypoint = new Vec3d(wx, wy, wz);
     }
@@ -301,8 +327,9 @@ public class ClientBird {
         double ground = getGroundY(world, pos.x, pos.z);
 
         // Prefer a high band but allow variation
-        double band = lerp(BirdConfig.preferredAboveGround - 20, BirdConfig.preferredAboveGround + 20, pseudoNoise01(world));
-        double desiredAbove = clamp(band, BirdConfig.minAltitudeAboveGround, BirdConfig.maxAltitudeAboveGround);
+        BirdSpecies.BirdSpeciesView v = species.viewForTime(world.isDaytime());
+        double band = lerp(v.preferredAboveGround() - 20, v.preferredAboveGround() + 20, pseudoNoise01(world));
+        double desiredAbove = clamp(band, v.minAltitudeAboveGround(), v.maxAltitudeAboveGround());
 
         return ground + desiredAbove;
     }
@@ -389,7 +416,8 @@ public class ClientBird {
             if (g > gMax) gMax = g;
         }
 
-        return gMax + BirdConfig.minAltitudeAboveGround;
+        BirdSpecies.BirdSpeciesView v = species.viewForTime(world.isDaytime());
+        return gMax + v.minAltitudeAboveGround();
     }
     private double computeRequiredMinYAt(World world, Vec3d atPos) {
         // Same as computeRequiredMinY, but centered at an arbitrary position (nextPos).
@@ -408,7 +436,8 @@ public class ClientBird {
             if (g > gMax) gMax = g;
         }
 
-        return gMax + BirdConfig.minAltitudeAboveGround;
+        BirdSpecies.BirdSpeciesView v = species.viewForTime(world.isDaytime());
+        return gMax + v.minAltitudeAboveGround();
     }
 
 

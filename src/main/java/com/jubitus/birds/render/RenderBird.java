@@ -71,8 +71,14 @@ public class RenderBird {
         double y = iy - camPos.y;
         double z = iz - camPos.z;
 
-        ResourceLocation tex = BirdTexture.get(b.textureIndex);
+        ResourceLocation tex = BirdTexture.get(b);
+        if (tex == null) {
+            // No texture => skip drawing rather than crash
+            GlStateManager.popMatrix();
+            return;
+        }
         mc.getTextureManager().bindTexture(tex);
+
         GlStateManager.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_NEAREST);
         GlStateManager.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_NEAREST);
 
@@ -81,7 +87,7 @@ public class RenderBird {
         GlStateManager.pushMatrix();
         GlStateManager.translate(x, y, z);
 
-        double scale = 0.45;
+        double scale = (b.species != null) ? b.species.scale : 0.45;
         GlStateManager.scale(scale, scale, scale);
 
         // ✅ Apply lightmap brightness based on the bird's world position
@@ -118,7 +124,9 @@ public class RenderBird {
         // Small “flap” / wing wobble: vary width slightly
         // (optional improvement: include partialTicks in time)
         double t = mc.world.getTotalWorldTime() + partialTicks;
-        double flap = 0.08 * Math.sin((t + (b.hashCode() & 255)) * 0.35);
+        double amp = (b.species != null) ? b.species.flapAmplitude : 0.08;
+        double spd = (b.species != null) ? b.species.flapSpeed : 0.35;
+        double flap = amp * Math.sin((t + (b.hashCode() & 255)) * spd);
 
         double halfW = 1.2 + flap; // wings (left-right, X)
         double halfL = 0.7;        // length (tail->head, Z). Increase if bird looks too square.
