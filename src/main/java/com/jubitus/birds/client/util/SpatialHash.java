@@ -25,9 +25,25 @@ public class SpatialHash {
         buckets.computeIfAbsent(key, k -> new ArrayList<>()).add(b);
     }
 
+    private long key(Vec3d p) {
+        int cx = floorDiv((int) Math.floor(p.x), cellSize);
+        int cz = floorDiv((int) Math.floor(p.z), cellSize);
+        return pack(cx, cz);
+    }
+
+    private static int floorDiv(int a, int b) {
+        int r = a / b;
+        if ((a ^ b) < 0 && (r * b != a)) r--;
+        return r;
+    }
+
+    private static long pack(int x, int z) {
+        return (((long) x) << 32) ^ (z & 0xFFFFFFFFL);
+    }
+
     public List<ClientBird> queryNearby(Vec3d pos) {
-        int cx = floorDiv((int)Math.floor(pos.x), cellSize);
-        int cz = floorDiv((int)Math.floor(pos.z), cellSize);
+        int cx = floorDiv((int) Math.floor(pos.x), cellSize);
+        int cz = floorDiv((int) Math.floor(pos.z), cellSize);
 
         List<ClientBird> out = new ArrayList<>();
         for (int dx = -1; dx <= 1; dx++) {
@@ -38,21 +54,5 @@ public class SpatialHash {
             }
         }
         return out;
-    }
-
-    private long key(Vec3d p) {
-        int cx = floorDiv((int)Math.floor(p.x), cellSize);
-        int cz = floorDiv((int)Math.floor(p.z), cellSize);
-        return pack(cx, cz);
-    }
-
-    private static long pack(int x, int z) {
-        return (((long)x) << 32) ^ (z & 0xFFFFFFFFL);
-    }
-
-    private static int floorDiv(int a, int b) {
-        int r = a / b;
-        if ((a ^ b) < 0 && (r * b != a)) r--;
-        return r;
     }
 }

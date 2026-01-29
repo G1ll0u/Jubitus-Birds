@@ -1,9 +1,11 @@
 package com.jubitus.birds.render;
 
 import com.jubitus.birds.client.ClientBird;
-import com.jubitus.birds.client.util.BirdOrientation;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.*;
+import net.minecraft.client.renderer.BufferBuilder;
+import net.minecraft.client.renderer.GlStateManager;
+import net.minecraft.client.renderer.OpenGlHelper;
+import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
 import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.math.BlockPos;
@@ -55,7 +57,6 @@ public class RenderBird {
     }
 
 
-
     private static void renderOne(ClientBird b, Vec3d camPos, float partialTicks) {
         Minecraft mc = Minecraft.getMinecraft();
 
@@ -74,7 +75,6 @@ public class RenderBird {
         ResourceLocation tex = BirdTexture.get(b);
         if (tex == null) {
             // No texture => skip drawing rather than crash
-            GlStateManager.popMatrix();
             return;
         }
         mc.getTextureManager().bindTexture(tex);
@@ -83,17 +83,51 @@ public class RenderBird {
         GlStateManager.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_NEAREST);
 
 
-
         GlStateManager.pushMatrix();
         GlStateManager.translate(x, y, z);
 
         double scale = (b.species != null) ? b.species.scale : 0.45;
         GlStateManager.scale(scale, scale, scale);
 
+        // ✅ "Magie" anti-invisible : incline légèrement le quad vers la caméra
+// Plus c'est loin + plus la caméra est à hauteur similaire => plus ça tilt
+        double cx = camPos.x - ix;
+        double cy = camPos.y - iy;
+        double cz = camPos.z - iz;
+
+        double dist = Math.sqrt(cx * cx + cy * cy + cz * cz);
+
+// direction normalisée vers la caméra
+        double invLen = (dist > 1e-6) ? (1.0 / dist) : 0.0;
+        double dxN = cx * invLen;
+        double dyN = cy * invLen;
+        double dzN = cz * invLen;
+
+// facteur distance: 0 proche, 1 loin (ajuste les chiffres si besoin)
+        float distFactor = (float) clamp01((dist - 12.0) / 64.0);
+
+// facteur "horizon": si dy est petit (caméra à même hauteur), on tilt plus
+        float horizonFactor = 1.0f - (float) Math.min(1.0, Math.abs(dyN));
+
+// force totale
+        float tiltStrength = distFactor * horizonFactor;
+
+// tilt max (en degrés)
+        float maxTiltDeg = 25.0f;
+
+// petite approximation: on “pousse” le quad vers la caméra
+        float tiltX = (float) (dzN * maxTiltDeg * tiltStrength);
+        float tiltZ = (float) (-dxN * maxTiltDeg * tiltStrength);
+
+// Appliquer AVANT yaw/pitch/roll pour que ça marche en "monde"
+        GlStateManager.rotate(tiltZ, 0f, 0f, 1f);
+        GlStateManager.rotate(tiltX, 1f, 0f, 0f);
+
+
         // ✅ Apply lightmap brightness based on the bird's world position
-        int bx = (int)Math.floor(ix);
-        int by = (int)Math.floor(iy);
-        int bz = (int)Math.floor(iz);
+        int bx = (int) Math.floor(ix);
+        int by = (int) Math.floor(iy);
+        int bz = (int) Math.floor(iz);
 
 
         int packedLight = mc.world.getCombinedLight(new BlockPos(bx, by, bz), 0);
@@ -103,14 +137,13 @@ public class RenderBird {
         int v = (packedLight >> 16) & 0xFFFF;
 
 // Feed lightmap (works in 1.12.x)
-        OpenGlHelper.setLightmapTextureCoords(OpenGlHelper.lightmapTexUnit, (float)u, (float)v);
+        OpenGlHelper.setLightmapTextureCoords(OpenGlHelper.lightmapTexUnit, (float) u, (float) v);
 
 
         // --- Interpolate angles too (prevents rotation stepping) ---
-        float yaw   = lerpAngle(b.prevYaw,   b.orientation.yawDeg,   partialTicks);
+        float yaw = lerpAngle(b.prevYaw, b.orientation.yawDeg, partialTicks);
         float pitch = lerpAngle(b.prevPitch, b.orientation.pitchDeg, partialTicks);
-        float roll  = lerpAngle(b.prevRoll,  b.orientation.rollDeg,  partialTicks);
-
+        float roll = lerpAngle(b.prevRoll, b.orientation.rollDeg, partialTicks);
 
 
         // IMPORTANT:
@@ -166,23 +199,23 @@ public class RenderBird {
         GlStateManager.popMatrix();
     }
 
+    private static double clamp01(double v) {
+        if (v < 0.0) return 0.0;
+        if (v > 1.0) return 1.0;
+        return v;
+    }
+
     private static float lerpAngle(float a, float b, float t) {
         float delta = wrapDegrees(b - a);
         return a + delta * t;
     }
 
-    private static float wrapDegrees(float deg) {
-        deg = deg % 360.0f;
-        if (deg >= 180.0f) deg -= 360.0f;
-        if (deg < -180.0f) deg += 360.0f;
-        return deg;
-    }
     private static float fogFadeAlpha(Minecraft mc, Vec3d camPos, double wx, double wy, double wz) {
         // distance from camera to bird
         double dx = wx - camPos.x;
         double dy = wy - camPos.y;
         double dz = wz - camPos.z;
-        double dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+        double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
         // Approximate vanilla-ish fog range from render distance
         double fogEnd = mc.gameSettings.renderDistanceChunks * 16.0;
@@ -192,7 +225,7 @@ public class RenderBird {
 
         // Underwater: much shorter visibility
         double fogStart = underwater ? fogEnd * 0.10 : fogEnd * 0.65;
-        fogEnd = underwater ? fogEnd * 0.35 : fogEnd * 1.00;
+        fogEnd = underwater ? fogEnd * 0.35 : fogEnd;
 
         // Convert to [0..1] alpha
         double a = (fogEnd - dist) / (fogEnd - fogStart);
@@ -203,6 +236,13 @@ public class RenderBird {
         if (underwater) a *= 0.7;
 
         return (float) a;
+    }
+
+    private static float wrapDegrees(float deg) {
+        deg = deg % 360.0f;
+        if (deg >= 180.0f) deg -= 360.0f;
+        if (deg < -180.0f) deg += 360.0f;
+        return deg;
     }
 
 }

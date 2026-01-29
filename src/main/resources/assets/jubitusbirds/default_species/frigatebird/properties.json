@@ -1,0 +1,62 @@
+{
+  "name": "frigatebird",
+  "enabled": true,
+  "spawnWeight": 0.22,
+  "birdsPerCellMax": 3,
+  "flockChancePerCell": 0.18,
+  "flockMin": 1,
+  "flockMax": 4,
+  "bigFlockChanceDay": 0.05,
+  "bigFlockChanceNight": 0.05,
+  "bigFlockMin": 5,
+  "bigFlockMax": 10,
+  "biomeWhitelist": [],
+  "biomeBlacklist": [],
+  "minSpeed": 0.45,
+  "maxSpeed": 0.88,
+  "maxTurnDegPerTick": 5.0,
+  "noiseStrength": 0.022,
+  "minAltitudeAboveGround": 40.0,
+  "maxAltitudeAboveGround": 220.0,
+  "preferredAboveGround": 140.0,
+  "verticalAdjustStrength": 0.0038,
+  "glideMinTicks": 90,
+  "glideMaxTicks": 240,
+  "circleMinTicks": 120,
+  "circleMaxTicks": 300,
+  "circleRadiusMin": 28.0,
+  "circleRadiusMax": 130.0,
+  "patternWeightGlide": 0.68,
+  "patternWeightCircle": 0.32,
+  "scale": 0.78,
+  "flapAmplitude": 0.04,
+  "flapSpeed": 0.24,
+  "canSpawnAtDay": true,
+  "canSpawnAtNight": false,
+  "day": {},
+  "night": {
+    "spawnWeight": 0.0
+  },
+  "biomeRules": {
+    "temperatureMin": null,
+    "temperatureMax": null,
+    "temperatureCategoryWhitelist": [
+      "WARM",
+      "MEDIUM"
+    ],
+    "requiresRain": null,
+    "requiresSnow": null,
+    "requiresOceanic": true,
+    "biomeManagerTypeWhitelist": [],
+    "biomeDictionaryWhitelist": [
+      "OCEAN",
+      "HOT"
+    ],
+    "biomeDictionaryBlacklist": [
+      "NETHER",
+      "END",
+      "COLD",
+      "SNOWY"
+    ]
+  }
+}

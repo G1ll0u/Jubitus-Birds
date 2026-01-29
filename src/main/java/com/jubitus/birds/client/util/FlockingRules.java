@@ -2,21 +2,10 @@ package com.jubitus.birds.client.util;
 
 import com.jubitus.birds.client.ClientBird;
 import net.minecraft.util.math.Vec3d;
+
 import java.util.List;
 
 public class FlockingRules {
-
-    public static class Params {
-        public double neighborRadius = 48.0;
-        public double separationRadius = 6.0;
-
-        public double weightCohesion = 1.35;
-        public double weightAlignment = 1.05;
-        public double weightSeparation = 0.65;
-
-        public double maxForce = 0.10;
-
-    }
 
     public static Vec3d boidsSteer(ClientBird self, List<ClientBird> candidates, Params p) {
         Vec3d cohesion = Vec3d.ZERO;
@@ -57,14 +46,26 @@ public class FlockingRules {
         if (separation.lengthSquared() > 1e-8) separation = separation.normalize();
 
         Vec3d force =
-            cohesion.scale(p.weightCohesion)
-                .add(alignment.scale(p.weightAlignment))
-                .add(separation.scale(p.weightSeparation));
+                cohesion.scale(p.weightCohesion)
+                        .add(alignment.scale(p.weightAlignment))
+                        .add(separation.scale(p.weightSeparation));
 
         // cap steering magnitude
         if (force.lengthSquared() > p.maxForce * p.maxForce) {
             force = force.normalize().scale(p.maxForce);
         }
         return force;
+    }
+
+    public static class Params {
+        public double neighborRadius = 48.0;
+        public double separationRadius = 6.0;
+
+        public double weightCohesion = 1.35;
+        public double weightAlignment = 1.05;
+        public double weightSeparation = 0.65;
+
+        public double maxForce = 0.10;
+
     }
 }

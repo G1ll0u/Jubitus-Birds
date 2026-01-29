@@ -9,7 +9,9 @@ import java.util.*;
 
 public class BiomeNameResolver {
 
-    /** Build maps once per load. */
+    /**
+     * Build maps once per load.
+     */
     public static ResolvedBiomeLists resolveLists(List<String> whitelist, List<String> blacklist, String speciesName) {
         Map<String, Biome> byRegistry = new HashMap<>();
         Map<String, List<Biome>> byNameNorm = new HashMap<>();
@@ -39,11 +41,23 @@ public class BiomeNameResolver {
         return new ResolvedBiomeLists(wlIds, blIds);
     }
 
+    /**
+     * Normalize: lowercase, remove punctuation, collapse whitespace.
+     */
+    public static String normalize(String s) {
+        if (s == null) return "";
+        String x = s.toLowerCase(Locale.ROOT);
+        x = x.replace('+', ' '); // treat + as space
+        x = x.replaceAll("[^a-z0-9\\s]", " "); // remove punctuation
+        x = x.replaceAll("\\s+", " ").trim();
+        return x;
+    }
+
     private static Set<String> resolveToRegistryIds(List<String> raw,
-                                                   Map<String, Biome> byRegistry,
-                                                   Map<String, List<Biome>> byNameNorm,
-                                                   String speciesName,
-                                                   String whichList) {
+                                                    Map<String, Biome> byRegistry,
+                                                    Map<String, List<Biome>> byNameNorm,
+                                                    String speciesName,
+                                                    String whichList) {
         Set<String> out = new HashSet<>();
         if (raw == null) return out;
 
@@ -95,16 +109,6 @@ public class BiomeNameResolver {
         }
 
         return out;
-    }
-
-    /** Normalize: lowercase, remove punctuation, collapse whitespace. */
-    public static String normalize(String s) {
-        if (s == null) return "";
-        String x = s.toLowerCase(Locale.ROOT);
-        x = x.replace('+', ' '); // treat + as space
-        x = x.replaceAll("[^a-z0-9\\s]", " "); // remove punctuation
-        x = x.replaceAll("\\s+", " ").trim();
-        return x;
     }
 
     public static class ResolvedBiomeLists {

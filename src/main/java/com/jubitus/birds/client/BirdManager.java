@@ -2,6 +2,7 @@ package com.jubitus.birds.client;
 
 import com.jubitus.birds.client.config.BirdConfig;
 import com.jubitus.birds.client.config.JubitusBirdsConfig;
+import com.jubitus.birds.client.sound.BirdSoundSystem;
 import com.jubitus.birds.client.util.Flock;
 import com.jubitus.birds.client.util.FlockSpawner;
 import com.jubitus.birds.client.util.SpatialHash;
@@ -36,7 +37,7 @@ public class BirdManager {
         World world = mc.world;
         EntityPlayer player = mc.player;
         if (world == null || player == null) return;
-
+        BirdSoundSystem.tickCleanup();
         // --- VIEW BORDER + DESPAWN ---
         int viewChunks = mc.gameSettings.renderDistanceChunks;
         double viewBorder = viewChunks * 16.0;
@@ -74,6 +75,7 @@ public class BirdManager {
 
             double d2 = b.pos.squareDistanceTo(cam);
             if (b.ageTicks > 60 && d2 > despawnDist2) {
+                BirdSoundSystem.stopForBird(b.getId());
                 it.remove();
             }
 
@@ -115,6 +117,7 @@ public class BirdManager {
                 if (birdsById.size() >= BirdConfig.maxBirdsAroundPlayer) break;
             }
         }
+        BirdSoundSystem.tickCleanup();
     }
 
     private void cleanupFlocks() {
@@ -129,6 +132,12 @@ public class BirdManager {
         flocksById.keySet().removeIf(id -> !used.contains(id));
     }
 
+    private static int floorDiv(int a, int b) {
+        int r = a / b;
+        if ((a ^ b) < 0 && (r * b != a)) r--;
+        return r;
+    }
+
     @SubscribeEvent
     public void onRenderWorldLast(RenderWorldLastEvent e) {
         Minecraft mc = Minecraft.getMinecraft();
@@ -137,14 +146,17 @@ public class BirdManager {
         RenderBird.renderAll(birdsById.values(), e.getPartialTicks());
     }
 
-    private static int floorDiv(int a, int b) {
-        int r = a / b;
-        if ((a ^ b) < 0 && (r * b != a)) r--;
-        return r;
-    }
     public void clearAllBirds() {
+        // stop any active bird sounds first
+        BirdSoundSystem.stopAll();
+
         birdsById.clear();
         flocksById.clear();
     }
+
+    public java.util.Collection<ClientBird> getAllBirdsForDebug() {
+        return birdsById.values();
+    }
+
 
 }

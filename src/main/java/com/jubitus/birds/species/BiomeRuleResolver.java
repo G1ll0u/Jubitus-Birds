@@ -56,10 +56,6 @@ public class BiomeRuleResolver {
         }
     }
 
-    private static void warn(BirdSpecies s, String field, String value) {
-        JubitusBirds.LOGGER.warn("[JubitusBirds] Species '{}' has unknown {} entry '{}'.", s.name, field, value);
-    }
-
     private static Biome.TempCategory parseTempCategory(String s) {
         if (s == null) return null;
         String u = s.trim().toUpperCase(Locale.ROOT);
@@ -68,6 +64,10 @@ public class BiomeRuleResolver {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private static void warn(BirdSpecies s, String field, String value) {
+        JubitusBirds.LOGGER.warn("[JubitusBirds] Species '{}' has unknown {} entry '{}'.", s.name, field, value);
     }
 
     private static BiomeManager.BiomeType parseBiomeManagerType(String s) {

@@ -1,0 +1,82 @@
+{
+  "name": "Swallow",
+  "enabled": true,
+  "spawnWeight": 0.6,
+  "birdsPerCellMax": 16,
+  "flockChancePerCell": 0.6,
+  "flockMin": 8,
+  "flockMax": 22,
+  "bigFlockChanceDay": 0.3,
+  "bigFlockChanceNight": 0.2,
+  "bigFlockMin": 25,
+  "bigFlockMax": 55,
+  "biomeWhitelist": [],
+  "biomeBlacklist": [],
+  "canSpawnAtDay": true,
+  "canSpawnAtNight": false,
+  "minSpeed": 0.5,
+  "maxSpeed": 0.78,
+  "maxTurnDegPerTick": 5.5,
+  "noiseStrength": 0.055,
+  "minAltitudeAboveGround": 8.0,
+  "maxAltitudeAboveGround": 32.0,
+  "preferredAboveGround": 24.0,
+  "verticalAdjustStrength": 0.006,
+  "glideMinTicks": 45,
+  "glideMaxTicks": 110,
+  "circleMinTicks": 60,
+  "circleMaxTicks": 170,
+  "circleRadiusMin": 10.0,
+  "circleRadiusMax": 40.0,
+  "patternWeightGlide": 0.5,
+  "patternWeightCircle": 0.5,
+  "scale": 0.2,
+  "flapAmplitude": 0.2,
+  "flapSpeed": 0.48,
+  "day": {
+    "spawnWeight": 1.0,
+    "preferredAboveGround": 12.0
+  },
+  "night": {
+    "spawnWeight": 0.0,
+    "minSpeed": 0.35,
+    "maxSpeed": 0.6,
+    "preferredAboveGround": 48.0
+  },
+  "soundsEnabled": true,
+  "soundSingle": {
+    "soundPitch": 1.0,
+    "soundVolume": 0.3,
+    "soundBaseIntervalTicks": 600,
+    "soundRandomness": 0.25,
+    "soundMaxDistance": 128.0,
+    "soundFadeStart": 2.0,
+    "soundFadePower": 2.5,
+    "soundPitchVariation": 0.07
+  },
+  "soundFlock": {
+    "soundPitch": 1.0,
+    "soundVolume": 0.3,
+    "soundBaseIntervalTicks": 420,
+    "soundRandomness": 0.0,
+    "soundMaxDistance": 128.0,
+    "soundFadeStart": 2.0,
+    "soundFadePower": 2.5,
+    "soundPitchVariation": 0.06
+  },
+  "biomeRules": {
+    "temperatureCategoryWhitelist": [],
+    "biomeManagerTypeWhitelist": [],
+    "biomeDictionaryWhitelist": [
+      "PLAINS",
+      "RIVER",
+      "FOREST",
+      "SWAMP"
+    ],
+    "biomeDictionaryBlacklist": [
+      "NETHER",
+      "END",
+      "OCEAN"
+    ]
+  }
+}

@@ -1,60 +1,51 @@
 package com.jubitus.birds.client;
 
 import com.jubitus.birds.client.config.BirdConfig;
+import com.jubitus.birds.client.sound.BirdCallSound;
+import com.jubitus.birds.client.sound.BirdCallType;
+import com.jubitus.birds.client.sound.BirdSoundSystem;
 import com.jubitus.birds.client.util.BirdOrientation;
 import com.jubitus.birds.client.util.BirdSteering;
 import com.jubitus.birds.client.util.FlockingRules;
 import com.jubitus.birds.species.BirdSpecies;
+import net.minecraft.client.Minecraft;
 import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.math.*;
+import net.minecraft.util.SoundEvent;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.RayTraceResult;
+import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 
 import java.util.Random;
 
 public class ClientBird {
 
-
-
     private static final double MAX_CLIMB_PER_TICK = 0.20; // blocks/tick, how fast it can "pull up" to avoid collision
     private static final double COLLISION_BUFFER = 1.0;    // extra clearance above min
-
-    public int ageTicks = 0;
     private static final FlockingRules.Params FLOCK_PARAMS = new FlockingRules.Params();
-
-    public enum Mode { GLIDE, CIRCLE }
-
-    private double smoothVy = 0.0;
-
-
+    public final BirdSpecies species;
+    public final BirdOrientation orientation = new BirdOrientation();
+    // Deterministic chosen texture for this bird
+    public final ResourceLocation texture;
+    private final long birdSeed;
+    private final Random rng;
+    public int ageTicks = 0;
     public Vec3d pos;
     public Vec3d vel;
-
+    public long flockId = 0L;
+    public Vec3d prevPos;
+    public float prevYaw, prevPitch, prevRoll;
+    private long nextCallWorldTick = -1;
+    private double smoothVy = 0.0;
     private Vec3d forward;        // normalized heading
     private Vec3d waypoint;       // for glide mode
     private Vec3d circleCenter;   // for circle mode
     private double circleRadius;
     private int modeTicksLeft;
     private Mode mode;
-
-    private final long birdSeed;
-    private final Random rng;
-
-    public final BirdSpecies species;
-
-    public long flockId = 0L;
-    public final BirdOrientation orientation = new BirdOrientation();
-
-    // Deterministic chosen texture for this bird
-    public final ResourceLocation texture;
-
-
-    public Vec3d prevPos;
-
-    public float prevYaw, prevPitch, prevRoll;
-
-
     // used for banking (roll)
     private Vec3d lastForwardXZ = new Vec3d(0, 0, 1);
+
 
     public ClientBird(World world, BirdSpecies species, long birdSeed, Vec3d startPos, Vec3d initialDir, double speed) {
         this.species = species;
@@ -69,9 +60,144 @@ public class ClientBird {
         this.texture = (species != null) ? species.pickTexture(birdSeed) : null;
 
         pickNewMode(world, true);
+
+        // schedule first call using SINGLE by default (we’ll swap to FLOCK automatically when flockId != 0)
+        BirdSpecies.BirdSpeciesView v = species.viewForTime(world.isDaytime());
+        BirdSpecies.SoundView sv = v.sound(BirdCallType.SINGLE);
+        scheduleNextCall(world, world.getTotalWorldTime(), sv, true);
     }
 
+    private void pickNewMode(World world, boolean first) {
+        // Slight preference to glide
+        double wG = species.patternWeightGlide;
+        double wC = species.patternWeightCircle;
+        double sum = wG + wC;
+        double r = rng.nextDouble() * sum;
+        boolean chooseCircle = (r >= wG);
 
+
+        if (chooseCircle) {
+            mode = Mode.CIRCLE;
+            BirdSpecies.BirdSpeciesView v = species.viewForTime(world.isDaytime());
+            modeTicksLeft = randInt(v.circleMinTicks(), v.circleMaxTicks());
+            circleRadius = lerp(v.circleRadiusMin(), v.circleRadiusMax(), rng.nextDouble());
+
+
+            // Circle center near current position, offset a bit
+            double ang = rng.nextDouble() * Math.PI * 2;
+            double dx = Math.cos(ang) * circleRadius;
+            double dz = Math.sin(ang) * circleRadius;
+
+            circleCenter = new Vec3d(pos.x + dx, pos.y, pos.z + dz);
+        } else {
+            mode = Mode.GLIDE;
+            BirdSpecies.BirdSpeciesView v = species.viewForTime(world.isDaytime());
+            modeTicksLeft = randInt(v.glideMinTicks(), v.glideMaxTicks());
+            pickGlideWaypoint(world);
+        }
+
+        // First time: ensure we don’t immediately dive
+        if (first) {
+            double gy = getGroundY(world, pos.x, pos.z);
+            BirdSpecies.BirdSpeciesView v = species.viewForTime(world.isDaytime());
+            double minY = gy + v.minAltitudeAboveGround();
+            if (pos.y < minY) pos = new Vec3d(pos.x, minY, pos.z);
+        }
+    }
+
+    private void scheduleNextCall(World world, long now, BirdSpecies.SoundView sv, boolean firstSchedule) {
+        int base = sv.soundBaseIntervalTicks();
+        double r = sv.soundRandomness(); // 0..1
+
+        // jitter factor: [1-r, 1+r]
+        double factor = 1.0;
+        if (r > 0) {
+            factor = (1.0 - r) + (rng.nextDouble() * (2.0 * r));
+        }
+
+        long delay = Math.max(20, Math.round(base * factor));
+
+        // Big improvement for “everything calls together after spawn”:
+        // On the FIRST schedule, spread the first call across up to ~base ticks (capped),
+        // so flocks don’t immediately chorus.
+        long extraPhase = 0;
+        if (firstSchedule) {
+            long cap = Math.min(600L, base); // cap spread at 30s
+            extraPhase = (cap > 0) ? (long) (rng.nextDouble() * cap) : 0;
+        }
+
+        // Small deterministic offset so birds don’t line up perfectly
+        long seedOffset = (birdSeed & 255L); // 0..255 ticks
+
+        nextCallWorldTick = now + delay + seedOffset + extraPhase;
+    }
+
+    private int randInt(int a, int b) {
+        return a + rng.nextInt(b - a + 1);
+    }
+
+    private static double lerp(double a, double b, double t) {
+        return a + (b - a) * t;
+    }
+
+    private void pickGlideWaypoint(World world) {
+        // A forward-ish waypoint so it feels like it’s passing through an area
+        double dist = 80 + rng.nextDouble() * 140;
+        double ang = Math.atan2(forward.z, forward.x) + (rng.nextDouble() - 0.5) * Math.toRadians(50);
+
+        double wx = pos.x + Math.cos(ang) * dist;
+        double wz = pos.z + Math.sin(ang) * dist;
+
+        double gy = getGroundY(world, wx, wz);
+        BirdSpecies.BirdSpeciesView v = species.viewForTime(world.isDaytime());
+        double targetAbove = lerp(v.preferredAboveGround() - 15, v.preferredAboveGround() + 15, rng.nextDouble());
+        double wy = gy + clamp(targetAbove, v.minAltitudeAboveGround(), v.maxAltitudeAboveGround());
+
+        waypoint = new Vec3d(wx, wy, wz);
+    }
+
+    private static double getGroundY(World world, double x, double z) {
+        // Use the top solid or liquid block at this column
+        BlockPos pos = new BlockPos(x, 0, z);
+        BlockPos top = world.getHeight(pos);
+        return top.getY();
+    }
+
+    private static double clamp(double v, double lo, double hi) {
+        return Math.max(lo, Math.min(hi, v));
+    }
+
+    private static Vec3d turnToward(Vec3d current, Vec3d desired, double maxDegPerTick) {
+        // Turn only in XZ plane for smoothness
+        Vec3d c = new Vec3d(current.x, 0, current.z).normalize();
+        Vec3d d = new Vec3d(desired.x, 0, desired.z).normalize();
+
+        double dot = clamp(c.dotProduct(d), -1.0, 1.0);
+        double angle = Math.acos(dot);
+        if (angle < 1e-6) return desired.normalize();
+
+        double max = Math.toRadians(maxDegPerTick);
+        double t = Math.min(1.0, max / angle);
+
+        Vec3d blended = c.scale(1 - t).add(d.scale(t)).normalize();
+
+        // keep original desired Y tendency small
+        return new Vec3d(blended.x, desired.y * 0.2, blended.z).normalize();
+    }
+
+    private static float distanceToPlayer(World world, Vec3d soundPos) {
+        Minecraft mc = Minecraft.getMinecraft();
+        if (mc == null || mc.player == null) return Float.MAX_VALUE;
+
+        double px = mc.player.posX;
+        double py = mc.player.posY + mc.player.getEyeHeight();
+        double pz = mc.player.posZ;
+
+        double dx = px - soundPos.x;
+        double dy = py - soundPos.y;
+        double dz = pz - soundPos.z;
+        return (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
+    }
 
     public void tick(World world, Vec3d flockForward, java.util.List<ClientBird> neighbors) {
         if (world == null) return;
@@ -184,7 +310,6 @@ public class ClientBird {
         double vy = clamp(smoothVy, -maxDown, maxUp);
 
 
-
         // Speed varies slightly by mode
         double speed = vel.length();
         double targetSpeed = (mode == Mode.CIRCLE)
@@ -231,11 +356,8 @@ public class ClientBird {
             // Encourage continued climb on following ticks (so it feels like pulling up)
             smoothVy = Math.max(smoothVy, lift); // lift is in blocks/tick effectively
         }
-
+        tryPlayCall(world, world.getTotalWorldTime(), v);
         pos = nextPos;
-
-
-
 
 
     }
@@ -267,60 +389,6 @@ public class ClientBird {
 
             return tangent.add(correction).normalize();
         }
-    }
-
-    private void pickNewMode(World world, boolean first) {
-        // Slight preference to glide
-        double wG = species.patternWeightGlide;
-        double wC = species.patternWeightCircle;
-        double sum = wG + wC;
-        double r = rng.nextDouble() * sum;
-        boolean chooseCircle = (r >= wG);
-
-
-        if (chooseCircle) {
-            mode = Mode.CIRCLE;
-            BirdSpecies.BirdSpeciesView v = species.viewForTime(world.isDaytime());
-            modeTicksLeft = randInt(v.circleMinTicks(), v.circleMaxTicks());
-            circleRadius = lerp(v.circleRadiusMin(), v.circleRadiusMax(), rng.nextDouble());
-
-
-            // Circle center near current position, offset a bit
-            double ang = rng.nextDouble() * Math.PI * 2;
-            double dx = Math.cos(ang) * circleRadius;
-            double dz = Math.sin(ang) * circleRadius;
-
-            circleCenter = new Vec3d(pos.x + dx, pos.y, pos.z + dz);
-        } else {
-            mode = Mode.GLIDE;
-            BirdSpecies.BirdSpeciesView v = species.viewForTime(world.isDaytime());
-            modeTicksLeft = randInt(v.glideMinTicks(), v.glideMaxTicks());
-            pickGlideWaypoint(world);
-        }
-
-        // First time: ensure we don’t immediately dive
-        if (first) {
-            double gy = getGroundY(world, pos.x, pos.z);
-            BirdSpecies.BirdSpeciesView v = species.viewForTime(world.isDaytime());
-            double minY = gy + v.minAltitudeAboveGround();
-            if (pos.y < minY) pos = new Vec3d(pos.x, minY, pos.z);
-        }
-    }
-
-    private void pickGlideWaypoint(World world) {
-        // A forward-ish waypoint so it feels like it’s passing through an area
-        double dist = 80 + rng.nextDouble() * 140;
-        double ang = Math.atan2(forward.z, forward.x) + (rng.nextDouble() - 0.5) * Math.toRadians(50);
-
-        double wx = pos.x + Math.cos(ang) * dist;
-        double wz = pos.z + Math.sin(ang) * dist;
-
-        double gy = getGroundY(world, wx, wz);
-        BirdSpecies.BirdSpeciesView v = species.viewForTime(world.isDaytime());
-        double targetAbove = lerp(v.preferredAboveGround() - 15, v.preferredAboveGround() + 15, rng.nextDouble());
-        double wy = gy + clamp(targetAbove, v.minAltitudeAboveGround(), v.maxAltitudeAboveGround());
-
-        waypoint = new Vec3d(wx, wy, wz);
     }
 
     private double computeTargetY(World world) {
@@ -359,41 +427,9 @@ public class ClientBird {
         return null;
     }
 
-    private static Vec3d turnToward(Vec3d current, Vec3d desired, double maxDegPerTick) {
-        // Turn only in XZ plane for smoothness
-        Vec3d c = new Vec3d(current.x, 0, current.z).normalize();
-        Vec3d d = new Vec3d(desired.x, 0, desired.z).normalize();
-
-        double dot = clamp(c.dotProduct(d), -1.0, 1.0);
-        double angle = Math.acos(dot);
-        if (angle < 1e-6) return desired.normalize();
-
-        double max = Math.toRadians(maxDegPerTick);
-        double t = Math.min(1.0, max / angle);
-
-        Vec3d blended = c.scale(1 - t).add(d.scale(t)).normalize();
-
-        // keep original desired Y tendency small
-        return new Vec3d(blended.x, desired.y * 0.2, blended.z).normalize();
-    }
-
-    private static double getGroundY(World world, double x, double z) {
-        // Use the top solid or liquid block at this column
-        BlockPos pos = new BlockPos(x, 0, z);
-        BlockPos top = world.getHeight(pos);
-        return top.getY();
-    }
-
-    private int randInt(int a, int b) {
-        return a + rng.nextInt(b - a + 1);
-    }
-
-
-    private static double lerp(double a, double b, double t) { return a + (b - a) * t; }
-
-    private static double clamp(double v, double lo, double hi) { return Math.max(lo, Math.min(hi, v)); }
-
-    public long getId() { return birdSeed; } // use your existing birdSeed field
+    public long getId() {
+        return birdSeed;
+    } // use your existing birdSeed field
 
     private double getGroundAheadY(World world, double lookAheadDist) {
         Vec3d f = new Vec3d(forward.x, 0, forward.z);
@@ -419,6 +455,7 @@ public class ClientBird {
         BirdSpecies.BirdSpeciesView v = species.viewForTime(world.isDaytime());
         return gMax + v.minAltitudeAboveGround();
     }
+
     private double computeRequiredMinYAt(World world, Vec3d atPos) {
         // Same as computeRequiredMinY, but centered at an arbitrary position (nextPos).
         // We sample forward from atPos to handle steep terrain right in front of the next step.
@@ -440,5 +477,69 @@ public class ClientBird {
         return gMax + v.minAltitudeAboveGround();
     }
 
+    private void tryPlayCall(World world, long now, BirdSpecies.BirdSpeciesView v) {
+        if (world == null || v == null) return;
+        if (species == null) return;
+
+        // global enable (day/night override-aware)
+        if (!v.soundsEnabled()) return;
+        if (species.soundKey == null || species.soundKey.isEmpty()) return;
+
+        // choose pool based on flock membership
+        BirdCallType type = (flockId != 0L) ? BirdCallType.FLOCK : BirdCallType.SINGLE;
+
+        // must have files for this type
+        if (!BirdSoundSystem.hasSounds(species.soundKey, type)) return;
+
+
+        // pick the per-type tuning (day/night aware)
+        BirdSpecies.SoundView sv = v.sound(type);
+
+        if (nextCallWorldTick < 0) {
+            scheduleNextCall(world, now, sv, true);
+            return;
+        }
+
+        if (now < nextCallWorldTick) return;
+
+        float vol = (float) (sv.soundVolume() * BirdConfig.masterBirdVolume);
+        if (vol > (float) BirdConfig.masterBirdVolumeClamp) vol = (float) BirdConfig.masterBirdVolumeClamp;
+        if (vol < 0f) vol = 0f;
+
+        float pit = (float) sv.soundPitch();
+
+        // NEW: pitch variation as a MULTIPLIER (more natural than “add”)
+        double var = sv.soundPitchVariation(); // 0.05 = ±5%
+        if (var > 0.0) {
+            double jitter = (rng.nextDouble() * 2.0 - 1.0) * var; // [-var..+var]
+            pit = (float) (pit * (1.0 + jitter));
+        }
+        pit = (float) Math.max(0.5, Math.min(2.0, pit));
+
+        float maxDist = (float) sv.soundMaxDistance();
+        float distNow = distanceToPlayer(world, this.pos);
+
+        float fadeStart = (float) sv.soundFadeStart();
+        float fadePower = (float) sv.soundFadePower();
+
+        // too far => don’t start (reschedule)
+        if (distNow >= maxDist) {
+            scheduleNextCall(world, now, sv, false);
+            return;
+        }
+        ResourceLocation rl = BirdSoundSystem.getCallEvent(species.soundKey, type);
+        SoundEvent evt = BirdSoundSystem.getOrCreateEvent(rl);
+
+
+        BirdCallSound sound =
+                new BirdCallSound(this, world, evt, vol, pit, maxDist, fadeStart, fadePower);
+
+
+        BirdSoundSystem.playCallIfAllowed(getId(), flockId, type, sound);
+
+        scheduleNextCall(world, now, sv, false);
+    }
+
+    public enum Mode {GLIDE, CIRCLE}
 
 }
