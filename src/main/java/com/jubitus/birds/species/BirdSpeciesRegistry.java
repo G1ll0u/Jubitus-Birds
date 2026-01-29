@@ -1,12 +1,10 @@
 package com.jubitus.birds.species;
 
-import net.minecraft.world.World;
 import net.minecraft.world.biome.Biome;
-
-import java.util.*;
 import net.minecraftforge.common.BiomeDictionary;
 import net.minecraftforge.common.BiomeManager;
-import java.util.Set;
+
+import java.util.*;
 
 public class BirdSpeciesRegistry {
 
@@ -133,7 +131,7 @@ public class BirdSpeciesRegistry {
                     break;
                 }
             }
-            if (!ok) return false;
+            return ok;
         }
 
         return true;

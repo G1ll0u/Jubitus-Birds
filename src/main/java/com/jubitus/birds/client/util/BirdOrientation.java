@@ -11,6 +11,10 @@ public class BirdOrientation {
     private float lastPitch;
     private float lastRoll;
 
+    private static double clamp(double v, double lo, double hi) {
+        return Math.max(lo, Math.min(hi, v));
+    }
+
     public void updateFromVelocity(Vec3d vel, float maxYawStepDeg, float maxPitchStepDeg, float maxRollStepDeg) {
         // If nearly stationary: keep last angles (prevents jitter)
         if (vel.lengthSquared() < 1e-4) {
@@ -42,20 +46,14 @@ public class BirdOrientation {
         lastRoll = rollDeg;
     }
 
-
-    public void setTargetRoll(float targetRollDeg, float maxStepDeg) {
-        rollDeg = approach(lastRoll, targetRollDeg, maxStepDeg);
-        lastRoll = rollDeg;
-    }
-
-    private static float approach(float current, float target, float maxStep) {
-        float delta = target - current;
+    private static float approachAngle(float current, float target, float maxStep) {
+        float delta = wrapDegrees(target - current);
         if (Math.abs(delta) <= maxStep) return target;
         return current + Math.signum(delta) * maxStep;
     }
 
-    private static float approachAngle(float current, float target, float maxStep) {
-        float delta = wrapDegrees(target - current);
+    private static float approach(float current, float target, float maxStep) {
+        float delta = target - current;
         if (Math.abs(delta) <= maxStep) return target;
         return current + Math.signum(delta) * maxStep;
     }
@@ -67,7 +65,8 @@ public class BirdOrientation {
         return deg;
     }
 
-    private static double clamp(double v, double lo, double hi) {
-        return Math.max(lo, Math.min(hi, v));
+    public void setTargetRoll(float targetRollDeg, float maxStepDeg) {
+        rollDeg = approach(lastRoll, targetRollDeg, maxStepDeg);
+        lastRoll = rollDeg;
     }
 }

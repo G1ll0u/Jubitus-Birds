@@ -32,10 +32,6 @@ public class Flock {
         }
     }
 
-    public Vec3d getGroupForward() {
-        return groupForward;
-    }
-
     private void nudgeHeading() {
         // rotate a bit left/right around current heading (gentle group decision)
         double ang = (rng.nextDouble() - 0.5) * Math.toRadians(35); // +/- 35 degrees
@@ -50,6 +46,10 @@ public class Flock {
         double nz = x * sin + z * cos;
 
         groupForward = new Vec3d(nx, 0, nz).normalize();
+    }
+
+    public Vec3d getGroupForward() {
+        return groupForward;
     }
 
 }

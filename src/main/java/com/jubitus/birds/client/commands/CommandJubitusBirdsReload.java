@@ -2,6 +2,7 @@ package com.jubitus.birds.client.commands;
 
 import com.jubitus.birds.JubitusBirds;
 import com.jubitus.birds.client.BirdManager;
+import com.jubitus.birds.client.sound.BirdSoundSystem;
 import com.jubitus.birds.species.BirdSpeciesLoader;
 import net.minecraft.command.CommandBase;
 import net.minecraft.command.ICommandSender;
@@ -25,6 +26,21 @@ public class CommandJubitusBirdsReload extends CommandBase implements IClientCom
         return "/jubitusbirdsreload";
     }
 
+    @Override
+    public void execute(MinecraftServer server, ICommandSender sender, String[] args) {
+        BirdSpeciesLoader.loadAllSpecies();
+
+        // Only reload sound registry, not all assets
+        BirdSoundSystem.reloadSoundsOnly();
+
+        if (BirdManager.INSTANCE != null) {
+            BirdManager.INSTANCE.clearAllBirds();
+        }
+
+        JubitusBirds.LOGGER.info("[JubitusBirds] Reloaded default_species via command.");
+        sender.sendMessage(new TextComponentString("§a[JubitusBirds] Reloaded default_species + cleared birds."));
+    }
+
     // ⭐ This is the key for TAB autocomplete visibility
     @Override
     public int getRequiredPermissionLevel() {
@@ -35,18 +51,6 @@ public class CommandJubitusBirdsReload extends CommandBase implements IClientCom
     @Override
     public boolean checkPermission(MinecraftServer server, ICommandSender sender) {
         return true;
-    }
-
-    @Override
-    public void execute(MinecraftServer server, ICommandSender sender, String[] args) {
-        BirdSpeciesLoader.loadAllSpecies();
-
-        if (BirdManager.INSTANCE != null) {
-            BirdManager.INSTANCE.clearAllBirds();
-        }
-
-        JubitusBirds.LOGGER.info("[JubitusBirds] Reloaded species via command.");
-        sender.sendMessage(new TextComponentString("§a[JubitusBirds] Reloaded species + cleared birds."));
     }
 
     // Optional: no args to complete

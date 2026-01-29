@@ -1,0 +1,62 @@
+{
+  "name": "northern harrier",
+  "enabled": true,
+  "spawnWeight": 0.45,
+  "birdsPerCellMax": 3,
+  "flockChancePerCell": 0.1,
+  "flockMin": 1,
+  "flockMax": 2,
+  "bigFlockChanceDay": 0.0,
+  "bigFlockChanceNight": 0.05,
+  "bigFlockMin": 0,
+  "bigFlockMax": 0,
+  "biomeWhitelist": [],
+  "biomeBlacklist": [],
+  "canSpawnAtDay": true,
+  "canSpawnAtNight": false,
+  "minSpeed": 0.34,
+  "maxSpeed": 0.64,
+  "maxTurnDegPerTick": 5.6,
+  "noiseStrength": 0.03,
+  "minAltitudeAboveGround": 8.0,
+  "maxAltitudeAboveGround": 64.0,
+  "preferredAboveGround": 12.0,
+  "verticalAdjustStrength": 0.0048,
+  "glideMinTicks": 70,
+  "glideMaxTicks": 180,
+  "circleMinTicks": 80,
+  "circleMaxTicks": 220,
+  "circleRadiusMin": 18.0,
+  "circleRadiusMax": 85.0,
+  "patternWeightGlide": 0.58,
+  "patternWeightCircle": 0.42,
+  "scale": 0.7,
+  "flapAmplitude": 0.055,
+  "flapSpeed": 0.26,
+  "day": {
+    "spawnWeight": 0.8,
+    "preferredAboveGround": 48.0
+  },
+  "night": {
+    "spawnWeight": 0.0,
+    "minSpeed": 0.35,
+    "maxSpeed": 0.6,
+    "preferredAboveGround": 48.0
+  },
+  "biomeRules": {
+    "temperatureCategoryWhitelist": [],
+    "biomeManagerTypeWhitelist": [],
+    "biomeDictionaryWhitelist": [
+      "SWAMP",
+      "WET",
+      "PLAINS",
+      "RIVER"
+    ],
+    "biomeDictionaryBlacklist": [
+      "NETHER",
+      "END",
+      "OCEAN",
+      "MOUNTAIN"
+    ]
+  }
+}

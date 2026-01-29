@@ -1,0 +1,84 @@
+{
+  "name": "Golden eagle",
+  "enabled": true,
+  "spawnWeight": 0.4,
+  "birdsPerCellMax": 2,
+  "flockChancePerCell": 0.07,
+  "flockMin": 1,
+  "flockMax": 2,
+  "bigFlockChanceDay": 0.0,
+  "bigFlockChanceNight": 0.05,
+  "bigFlockMin": 0,
+  "bigFlockMax": 0,
+  "biomeWhitelist": [],
+  "biomeBlacklist": [],
+  "canSpawnAtDay": true,
+  "canSpawnAtNight": false,
+  "minSpeed": 0.4,
+  "maxSpeed": 0.82,
+  "maxTurnDegPerTick": 4.8,
+  "noiseStrength": 0.02,
+  "minAltitudeAboveGround": 45.0,
+  "maxAltitudeAboveGround": 64.0,
+  "preferredAboveGround": 24.0,
+  "verticalAdjustStrength": 0.0036,
+  "glideMinTicks": 110,
+  "glideMaxTicks": 260,
+  "circleMinTicks": 120,
+  "circleMaxTicks": 320,
+  "circleRadiusMin": 28.0,
+  "circleRadiusMax": 120.0,
+  "patternWeightGlide": 0.7,
+  "patternWeightCircle": 0.3,
+  "scale": 1.2,
+  "flapAmplitude": 0.045,
+  "flapSpeed": 0.22,
+  "day": {
+    "spawnWeight": 1.0,
+    "preferredAboveGround": 48.0
+  },
+  "night": {
+    "spawnWeight": 0.0,
+    "minSpeed": 0.35,
+    "maxSpeed": 0.6,
+    "preferredAboveGround": 48.0
+  },
+  "soundSingle": {
+    "soundPitch": 1.0,
+    "soundVolume": 0.6,
+    "soundBaseIntervalTicks": 1200,
+    "soundRandomness": 0.25,
+    "soundMaxDistance": 128.0,
+    "soundFadeStart": 8.0,
+    "soundFadePower": 2.0,
+    "soundPitchVariation": 0.05
+  },
+  "soundFlock": {
+    "soundPitch": 1.0,
+    "soundVolume": 0.6,
+    "soundBaseIntervalTicks": 600,
+    "soundRandomness": 0.5,
+    "soundMaxDistance": 128.0,
+    "soundFadeStart": 8.0,
+    "soundFadePower": 2.0,
+    "soundPitchVariation": 0.05
+  },
+  "biomeRules": {
+    "temperatureCategoryWhitelist": [
+      "COLD",
+      "MEDIUM"
+    ],
+    "biomeManagerTypeWhitelist": [],
+    "biomeDictionaryWhitelist": [
+      "MOUNTAIN",
+      "HILLS",
+      "COLD"
+    ],
+    "biomeDictionaryBlacklist": [
+      "NETHER",
+      "END",
+      "OCEAN",
+      "HOT"
+    ]
+  }
+}

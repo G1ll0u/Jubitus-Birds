@@ -1,0 +1,65 @@
+{
+  "name": "Eurasian griffon",
+  "enabled": true,
+  "spawnWeight": 0.22,
+  "birdsPerCellMax": 3,
+  "flockChancePerCell": 0.28,
+  "flockMin": 2,
+  "flockMax": 6,
+  "bigFlockChanceDay": 0.08,
+  "bigFlockChanceNight": 0.05,
+  "bigFlockMin": 7,
+  "bigFlockMax": 16,
+  "biomeWhitelist": [],
+  "biomeBlacklist": [],
+  "canSpawnAtDay": true,
+  "canSpawnAtNight": false,
+  "minSpeed": 0.3,
+  "maxSpeed": 0.6,
+  "maxTurnDegPerTick": 3.8,
+  "noiseStrength": 0.018,
+  "minAltitudeAboveGround": 50.0,
+  "maxAltitudeAboveGround": 290.0,
+  "preferredAboveGround": 185.0,
+  "verticalAdjustStrength": 0.0032,
+  "glideMinTicks": 130,
+  "glideMaxTicks": 310,
+  "circleMinTicks": 150,
+  "circleMaxTicks": 360,
+  "circleRadiusMin": 36.0,
+  "circleRadiusMax": 150.0,
+  "patternWeightGlide": 0.76,
+  "patternWeightCircle": 0.24,
+  "scale": 1.37,
+  "flapAmplitude": 0.032,
+  "flapSpeed": 0.19,
+  "day": {
+    "spawnWeight": 1.0,
+    "preferredAboveGround": 48.0
+  },
+  "night": {
+    "spawnWeight": 0.0,
+    "minSpeed": 0.35,
+    "maxSpeed": 0.6,
+    "preferredAboveGround": 48.0
+  },
+  "biomeRules": {
+    "temperatureCategoryWhitelist": [
+      "WARM"
+    ],
+    "biomeManagerTypeWhitelist": [],
+    "biomeDictionaryWhitelist": [
+      "MOUNTAIN",
+      "HILLS",
+      "DRY",
+      "HOT"
+    ],
+    "biomeDictionaryBlacklist": [
+      "NETHER",
+      "END",
+      "OCEAN",
+      "WET",
+      "SWAMP"
+    ]
+  }
+}

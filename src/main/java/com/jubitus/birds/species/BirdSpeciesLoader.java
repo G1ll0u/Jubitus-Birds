@@ -4,34 +4,34 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
 import com.jubitus.birds.JubitusBirds;
+import com.jubitus.birds.client.sound.BirdCallType;
+import com.jubitus.birds.client.sound.BirdSoundSystem;
 import com.jubitus.jubitusbirds.Tags;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.client.renderer.texture.TextureUtil;
 import net.minecraft.util.ResourceLocation;
 
-import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
-import java.io.*;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.*;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 public class BirdSpeciesLoader {
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
-    /** config/jubitusbirds/ */
-    public static Path getRootConfigDir() {
-        // 1.12.2: config folder is relative to game dir
-        File gameDir = Minecraft.getMinecraft().gameDir;
-        return gameDir.toPath().resolve("config").resolve("jubitusbirds/species");
-    }
-
     public static void loadAllSpecies() {
         BirdSpeciesRegistry.clear();
+        BirdSoundSystem.clearAllSpeciesSounds(); // IMPORTANT: avoid stale keys after reload
 
-        ensureDefaultSwallowExists();
 
         Path root = getRootConfigDir();
         if (!Files.exists(root)) {
@@ -42,6 +42,8 @@ public class BirdSpeciesLoader {
         try (DirectoryStream<Path> ds = Files.newDirectoryStream(root)) {
             for (Path speciesDir : ds) {
                 if (!Files.isDirectory(speciesDir)) continue;
+
+                String folderName = speciesDir.getFileName().toString();
 
                 Path props = speciesDir.resolve("properties.json");
                 Path texDir = speciesDir.resolve("textures");
@@ -55,8 +57,14 @@ public class BirdSpeciesLoader {
                     continue;
                 }
 
-                BirdSpecies s = readSpeciesJson(speciesDir.getFileName().toString(), props);
+                BirdSpecies s = readSpeciesJson(folderName, props);
                 if (s == null) continue;
+
+                s.folderName = folderName;
+
+                String soundKey = folderName.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_\\-]", "_");
+                s.soundKey = soundKey;
+
 
                 // Load textures
                 int texCount = loadTexturesForSpecies(s, texDir);
@@ -65,7 +73,31 @@ public class BirdSpeciesLoader {
                     continue;
                 }
 
+                // NEW per-default_species sound folders:
+                Path singleDir = speciesDir.resolve("sounds_single");
+                Path flockDir = speciesDir.resolve("sounds_flock");
+
+                List<String> singleSounds = loadSoundsForPool(soundKey, "single", singleDir);
+                List<String> flockSounds = loadSoundsForPool(soundKey, "flock", flockDir);
+
+                BirdSoundSystem.setSpeciesSounds(soundKey, BirdCallType.SINGLE, singleSounds);
+                BirdSoundSystem.setSpeciesSounds(soundKey, BirdCallType.FLOCK, flockSounds);
+
                 s.clampAndFix();
+// On prend le max entre jour/nuit pour éviter les surprises quand il fait nuit
+                double singleMax = Math.max(
+                        s.viewForTime(true).sound(BirdCallType.SINGLE).soundMaxDistance(),
+                        s.viewForTime(false).sound(BirdCallType.SINGLE).soundMaxDistance()
+                );
+
+                double flockMax = Math.max(
+                        s.viewForTime(true).sound(BirdCallType.FLOCK).soundMaxDistance(),
+                        s.viewForTime(false).sound(BirdCallType.FLOCK).soundMaxDistance()
+                );
+
+                BirdSoundSystem.setAttenuationDistance(soundKey, BirdCallType.SINGLE, singleMax);
+                BirdSoundSystem.setAttenuationDistance(soundKey, BirdCallType.FLOCK, flockMax);
+
                 BiomeNameResolver.ResolvedBiomeLists resolved =
                         BiomeNameResolver.resolveLists(s.biomeWhitelist, s.biomeBlacklist, s.name);
 
@@ -74,15 +106,28 @@ public class BirdSpeciesLoader {
 
                 BirdSpeciesRegistry.register(s);
                 BiomeRuleResolver.resolve(s);
-                JubitusBirds.LOGGER.info("[JubitusBirds] Loaded species '{}' with {} texture(s).", s.name, s.textures.size());
+
+                JubitusBirds.LOGGER.info("[JubitusBirds] Species '{}' soundKey='{}' singleSounds={} flockSounds={}",
+                        s.name, s.soundKey, singleSounds.size(), flockSounds.size());
+
+                JubitusBirds.LOGGER.info("[JubitusBirds] Loaded default_species '{}' with {} texture(s).", s.name, s.textures.size());
             }
         } catch (IOException e) {
-            JubitusBirds.LOGGER.error("[JubitusBirds] Failed scanning species folder.", e);
+            JubitusBirds.LOGGER.error("[JubitusBirds] Failed scanning default_species folder.", e);
         }
 
         if (BirdSpeciesRegistry.all().isEmpty()) {
-            JubitusBirds.LOGGER.error("[JubitusBirds] No species loaded! Birds will not spawn.");
+            JubitusBirds.LOGGER.error("[JubitusBirds] No default_species loaded! Birds will not spawn.");
         }
+    }
+
+    /**
+     * config/jubitusbirds/
+     */
+    public static Path getRootConfigDir() {
+        // 1.12.2: config folder is relative to game dir
+        File gameDir = Minecraft.getMinecraft().gameDir;
+        return gameDir.toPath().resolve("config").resolve("jubitusbirds/default_species");
     }
 
     private static BirdSpecies readSpeciesJson(String folderName, Path props) {
@@ -134,6 +179,42 @@ public class BirdSpeciesLoader {
         return ok;
     }
 
+    private static List<String> loadSoundsForPool(String speciesKey, String poolName, Path soundDir) {
+        List<String> out = new ArrayList<>();
+        try {
+            if (!Files.isDirectory(soundDir)) return out;
+
+            Files.list(soundDir).forEach(p -> {
+                String n = p.getFileName().toString();
+                String lower = n.toLowerCase(Locale.ROOT);
+                if (!lower.endsWith(".ogg")) return;
+
+                String codec = detectOggCodec(p);
+
+                if (!"vorbis".equals(codec)) {
+                    long size = -1;
+                    try {
+                        size = Files.size(p);
+                    } catch (IOException ignored) {
+                    }
+                    JubitusBirds.LOGGER.error("[JubitusBirds] Skipping {} sound for default_species='{}' file={} (codec={}, {} bytes). Minecraft 1.12 needs VORBIS.",
+                            poolName, speciesKey, p.toAbsolutePath(), codec, size);
+                    return;
+                }
+
+                // sound name in sounds.json must NOT include ".ogg"
+                String noExt = n.substring(0, n.length() - 4);
+                noExt = noExt.replaceAll("[^a-zA-Z0-9_\\-\\.]", "_");
+                out.add(noExt);
+            });
+
+        } catch (Exception e) {
+            JubitusBirds.LOGGER.warn("[JubitusBirds] Error reading {} sounds for speciesKey='{}' dir={} err={}",
+                    poolName, speciesKey, soundDir.toAbsolutePath(), e.getMessage());
+        }
+
+        return out;
+    }
 
     private static ResourceLocation registerRuntimeTexture(BirdSpecies s, Path pngPath) {
         try (InputStream in = Files.newInputStream(pngPath)) {
@@ -164,60 +245,35 @@ public class BirdSpeciesLoader {
         }
     }
 
-
-    /**
-     * Creates /config/jubitusbirds/swallow/ with defaults by copying from jar resources:
-     * assets/<modid>/jubitusbirds_defaults/swallow/...
-     */
-    private static void ensureDefaultSwallowExists() {
-        Path root = getRootConfigDir();
-        Path swallowDir = root.resolve("swallow");
-        Path props = swallowDir.resolve("properties.json");
-        Path texDir = swallowDir.resolve("textures");
-
+    private static String detectOggCodec(Path file) {
         try {
-            if (!Files.exists(root)) Files.createDirectories(root);
+            if (!Files.isRegularFile(file)) return "not_a_file";
+            long size = Files.size(file);
+            if (size < 64) return "too_small";
 
-            // If already exists and has properties, do nothing
-            if (Files.exists(props) && Files.isDirectory(texDir)) return;
+            byte[] buf = new byte[4096];
+            int n;
+            try (InputStream in = new java.io.BufferedInputStream(new java.io.FileInputStream(file.toFile()))) {
+                n = in.read(buf);
+            }
+            if (n <= 0) return "unreadable";
 
-            Files.createDirectories(texDir);
-
-            // Copy properties.json + a couple textures from jar resources.
-            // IMPORTANT: you must add these files into your jar under:
-            // resources/assets/<modid>/jubitusbirds_defaults/swallow/properties.json
-            // resources/assets/<modid>/jubitusbirds_defaults/swallow/textures/swallow_0.png
-            // ...
-            copyJarResourceIfMissing("/assets/" + Tags.MOD_ID + "/jubitusbirds_defaults/swallow/properties.json", props);
-
-            copyJarResourceIfMissing("/assets/" + Tags.MOD_ID + "/jubitusbirds_defaults/swallow/textures/swallow_0.png",
-                    texDir.resolve("swallow_0.png"));
-            copyJarResourceIfMissing("/assets/" + Tags.MOD_ID + "/jubitusbirds_defaults/swallow/textures/swallow_1.png",
-                    texDir.resolve("swallow_1.png"));
-
-            JubitusBirds.LOGGER.info("[JubitusBirds] Default species 'swallow' ensured at {}", swallowDir.toAbsolutePath());
-
-        } catch (IOException e) {
-            JubitusBirds.LOGGER.warn("[JubitusBirds] Failed ensuring default swallow folder: {}", e.getMessage());
-        }
-    }
-
-    private static void copyJarResourceIfMissing(String jarPath, Path outPath) {
-        try {
-            if (Files.exists(outPath)) return;
-
-            InputStream in = BirdSpeciesLoader.class.getResourceAsStream(jarPath);
-            if (in == null) {
-                JubitusBirds.LOGGER.error("[JubitusBirds] Missing bundled default resource in jar: {}", jarPath);
-                return;
+            // Ogg container magic
+            if (!(buf[0] == 'O' && buf[1] == 'g' && buf[2] == 'g' && buf[3] == 'S')) {
+                return "not_ogg_container";
             }
 
-            Files.createDirectories(outPath.getParent());
-            Files.copy(in, outPath, StandardCopyOption.REPLACE_EXISTING);
-            in.close();
+            String s = new String(buf, 0, n, java.nio.charset.StandardCharsets.ISO_8859_1);
+            if (s.contains("vorbis")) return "vorbis";
+            if (s.contains("OpusHead")) return "opus";
+            if (s.contains("Speex")) return "speex";
+            if (s.contains("FLAC")) return "flac_in_ogg";
 
-        } catch (IOException e) {
-            JubitusBirds.LOGGER.warn("[JubitusBirds] Failed copying {} to {}: {}", jarPath, outPath, e.getMessage());
+            return "unknown_ogg_codec";
+
+        } catch (Exception e) {
+            return "error:" + e.getClass().getSimpleName();
         }
     }
+
 }
