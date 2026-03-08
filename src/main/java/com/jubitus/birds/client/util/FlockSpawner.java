@@ -5,13 +5,6 @@ import com.jubitus.birds.client.config.BirdConfig;
 import com.jubitus.birds.client.util.spawn.BirdSpawnController;
 import com.jubitus.birds.species.BirdSpecies;
 import com.jubitus.birds.species.BirdSpeciesRegistry;
-import net.minecraft.entity.player.EntityPlayer;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.World;
-import net.minecraft.world.biome.Biome;
-
-import java.util.*;
 
 public class FlockSpawner {
 
@@ -89,6 +82,31 @@ public class FlockSpawner {
     // --------------------------
     // Helpers
     // --------------------------
+
+    // Same mixer you already use (unchanged)
+    private static long mixSeed(long a, long b, long c, long d, long e) {
+        long x = a;
+        x ^= (b * 0x9E3779B97F4A7C15L);
+        x ^= (c * 0xC2B2AE3D27D4EB4FL);
+        x ^= (d * 0x165667B19E3779F9L);
+        x ^= (e * 0x85EBCA6B);
+        x ^= (x >>> 33);
+        x *= 0xff51afd7ed558ccdL;
+        x ^= (x >>> 33);
+        x *= 0xc4ceb9fe1a85ec53L;
+        x ^= (x >>> 33);
+        return x;
+    }
+
+    private static double clamp(double v, double lo, double hi) {
+        if (v < lo) return lo;
+        if (v > hi) return hi;
+        return v;
+    }
+
+    private static double clamp01(double v) {
+        return Math.max(0.0, Math.min(1.0, v));
+    }
 
     private static boolean spawnOneFlock(net.minecraft.world.World world, net.minecraft.entity.player.EntityPlayer player, java.util.Random rng, long seed,
                                          SpawnResult out, BirdSpecies species, BirdSpecies.BirdSpeciesView view,
@@ -234,6 +252,41 @@ public class FlockSpawner {
         return s;
     }
 
+    private static int chooseFlockSize(net.minecraft.world.World world, java.util.Random rng, BirdSpecies species) {
+        boolean day = world.isDaytime();
+        double bigChance = day ? species.bigFlockChanceDay : species.bigFlockChanceNight;
+
+        if (rng.nextDouble() < bigChance) {
+            int min = Math.min(species.bigFlockMin, species.bigFlockMax);
+            int max = Math.max(species.bigFlockMin, species.bigFlockMax);
+            return min + rng.nextInt(max - min + 1);
+        } else {
+            int min = Math.min(species.flockMin, species.flockMax);
+            int max = Math.max(species.flockMin, species.flockMax);
+            return min + rng.nextInt(max - min + 1);
+        }
+    }
+
+    private static boolean passesSpawnConstraints(net.minecraft.world.World world, BirdSpecies species, net.minecraft.util.math.Vec3d pos) {
+        if (world == null || species == null || pos == null) return true;
+        if (species.spawning == null) return true;
+
+        BirdSpecies.SpawningSettings sp = species.spawning;
+
+        // absolute Y constraint
+        int y = (int) Math.floor(pos.y);
+        if (y < sp.minY) return false;
+        if (y > sp.maxY) return false;
+
+        // sky visibility constraint
+        if (sp.requiresSkyVisible) {
+            net.minecraft.util.math.BlockPos bp = new net.minecraft.util.math.BlockPos(pos.x, pos.y, pos.z);
+            return world.canSeeSky(bp);
+        }
+
+        return true;
+    }
+
     private static ClientBird spawnBird(net.minecraft.world.World world, net.minecraft.entity.player.EntityPlayer player, java.util.Random rng,
                                         long birdId, long flockId, Flock flock,
                                         BirdSpecies species, BirdSpecies.BirdSpeciesView view) {
@@ -314,66 +367,6 @@ public class FlockSpawner {
         if (maxD > 8192.0) maxD = 8192.0;
 
         return minD + rng.nextDouble() * (maxD - minD);
-    }
-
-    private static boolean passesSpawnConstraints(net.minecraft.world.World world, BirdSpecies species, net.minecraft.util.math.Vec3d pos) {
-        if (world == null || species == null || pos == null) return true;
-        if (species.spawning == null) return true;
-
-        BirdSpecies.SpawningSettings sp = species.spawning;
-
-        // absolute Y constraint
-        int y = (int) Math.floor(pos.y);
-        if (y < sp.minY) return false;
-        if (y > sp.maxY) return false;
-
-        // sky visibility constraint
-        if (sp.requiresSkyVisible) {
-            net.minecraft.util.math.BlockPos bp = new net.minecraft.util.math.BlockPos(pos.x, pos.y, pos.z);
-            if (!world.canSeeSky(bp)) return false;
-        }
-
-        return true;
-    }
-
-    private static int chooseFlockSize(net.minecraft.world.World world, java.util.Random rng, BirdSpecies species) {
-        boolean day = world.isDaytime();
-        double bigChance = day ? species.bigFlockChanceDay : species.bigFlockChanceNight;
-
-        if (rng.nextDouble() < bigChance) {
-            int min = Math.min(species.bigFlockMin, species.bigFlockMax);
-            int max = Math.max(species.bigFlockMin, species.bigFlockMax);
-            return min + rng.nextInt(max - min + 1);
-        } else {
-            int min = Math.min(species.flockMin, species.flockMax);
-            int max = Math.max(species.flockMin, species.flockMax);
-            return min + rng.nextInt(max - min + 1);
-        }
-    }
-
-    // Same mixer you already use (unchanged)
-    private static long mixSeed(long a, long b, long c, long d, long e) {
-        long x = a;
-        x ^= (b * 0x9E3779B97F4A7C15L);
-        x ^= (c * 0xC2B2AE3D27D4EB4FL);
-        x ^= (d * 0x165667B19E3779F9L);
-        x ^= (e * 0x85EBCA6B);
-        x ^= (x >>> 33);
-        x *= 0xff51afd7ed558ccdL;
-        x ^= (x >>> 33);
-        x *= 0xc4ceb9fe1a85ec53L;
-        x ^= (x >>> 33);
-        return x;
-    }
-
-    private static double clamp01(double v) {
-        return Math.max(0.0, Math.min(1.0, v));
-    }
-
-    private static double clamp(double v, double lo, double hi) {
-        if (v < lo) return lo;
-        if (v > hi) return hi;
-        return v;
     }
 
     public static class SpawnResult {

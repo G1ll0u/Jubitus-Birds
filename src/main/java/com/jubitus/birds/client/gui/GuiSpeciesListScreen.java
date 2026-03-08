@@ -5,12 +5,7 @@ import com.jubitus.birds.species.BirdSpeciesRegistry;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiScreen;
-import net.minecraft.client.renderer.BufferBuilder;
-import net.minecraft.client.renderer.GlStateManager;
-import net.minecraft.client.renderer.Tessellator;
-import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
 import net.minecraft.util.ResourceLocation;
-import org.lwjgl.opengl.GL11;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -95,12 +90,18 @@ public class GuiSpeciesListScreen extends GuiScreen {
     }
 
 
-
     @Override
     public void handleMouseInput() throws IOException {
         super.handleMouseInput();
         if (list != null) list.handleMouseInput();
     }
+
+    @Override
+    public void onGuiClosed() {
+        super.onGuiClosed();
+    }
+
+    // Tiny 3D turntable preview (same spirit as the editor one)
 
     // Pick a texture for preview (cycles every 3s like your editor)
     ResourceLocation pickPreviewTexture(BirdSpecies s) {
@@ -112,15 +113,10 @@ public class GuiSpeciesListScreen extends GuiScreen {
         return s.textures.get(idx);
     }
 
-    // Tiny 3D turntable preview (same spirit as the editor one)
-
-
-
     // Couleur ciel vanilla (biome/heure). Fallback si world/player pas dispo.
     int getDaySkyARGB() {
         return 0xFF7BA4FF; // joli bleu "ciel MC"
     }
-
 
     void drawPreviewFrame(int x0, int y0, int x1, int y1, int fillARGB, int borderARGB) {
         // fill
@@ -133,12 +129,12 @@ public class GuiSpeciesListScreen extends GuiScreen {
         net.minecraft.client.gui.Gui.drawRect(x1 - 1, y0, x1, y1, borderARGB);       // right
     }
 
-    @Override
-    public void onGuiClosed() {
-        super.onGuiClosed();
+    int getPreviewColX0() {
+        return previewColX0;
     }
 
-    int getPreviewColX0() { return previewColX0; }
-    int getPreviewColX1() { return previewColX1; }
+    int getPreviewColX1() {
+        return previewColX1;
+    }
 }
 

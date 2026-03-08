@@ -138,6 +138,7 @@ public class BirdSpeciesRegistry {
 
         return true;
     }
+
     public static BirdSpecies pickForBiomeWithContext(net.minecraft.world.World world,
                                                       Biome biome,
                                                       Random rng,

@@ -1,18 +1,18 @@
 package com.jubitus.birds.client.gui;
 
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.ScaledResolution;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.OpenGlHelper;
 import org.lwjgl.opengl.GL11;
 
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.ScaledResolution;
-import net.minecraft.client.renderer.GlStateManager;
-import org.lwjgl.opengl.GL11;
-
 public final class GuiGlStateReset {
-    private GuiGlStateReset() {}
+    private GuiGlStateReset() {
+    }
 
-    /** Hard reset to a safe vanilla-ish GUI state (OptiFine friendly). */
+    /**
+     * Hard reset to a safe vanilla-ish GUI state (OptiFine friendly).
+     */
     public static void reset() {
         Minecraft mc = Minecraft.getMinecraft();
         if (mc == null) return;
@@ -58,7 +58,9 @@ public final class GuiGlStateReset {
         restoreGuiMatrices(mc);
     }
 
-    /** Rebuild the same projection/modelview setup vanilla GUIs expect. */
+    /**
+     * Rebuild the same projection/modelview setup vanilla GUIs expect.
+     */
     private static void restoreGuiMatrices(Minecraft mc) {
         ScaledResolution sr = new ScaledResolution(mc);
         int sw = sr.getScaledWidth();
@@ -68,7 +70,7 @@ public final class GuiGlStateReset {
         GlStateManager.matrixMode(GL11.GL_PROJECTION);
         GlStateManager.loadIdentity();
         // Same ranges vanilla uses for GUI
-        GlStateManager.ortho(0.0D, (double) sw, (double) sh, 0.0D, 1000.0D, 3000.0D);
+        GlStateManager.ortho(0.0D, sw, sh, 0.0D, 1000.0D, 3000.0D);
 
         // ModelView
         GlStateManager.matrixMode(GL11.GL_MODELVIEW);

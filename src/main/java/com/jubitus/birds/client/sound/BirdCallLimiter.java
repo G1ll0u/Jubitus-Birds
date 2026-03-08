@@ -13,7 +13,8 @@ public final class BirdCallLimiter {
     private static final int GRID = 16; // blocks
     private static final Map<String, SpeciesGrid> BY_SPECIES = new HashMap<>();
 
-    private BirdCallLimiter() {}
+    private BirdCallLimiter() {
+    }
 
     public static boolean allowCall(String speciesKey, long nowTick, Vec3d pos, BirdSpecies.SoundSpamSettings s) {
         if (speciesKey == null) speciesKey = "unknown";
@@ -33,6 +34,16 @@ public final class BirdCallLimiter {
 
     public static void clearAll() {
         BY_SPECIES.clear();
+    }
+
+    private static int floorDiv(int a, int b) {
+        int r = a / b;
+        if ((a ^ b) < 0 && (r * b != a)) r--;
+        return r;
+    }
+
+    private static long pack(int x, int z) {
+        return (((long) x) << 32) ^ (z & 0xFFFFFFFFL);
     }
 
     private static final class SpeciesGrid {
@@ -119,15 +130,5 @@ public final class BirdCallLimiter {
             this.x = x;
             this.z = z;
         }
-    }
-
-    private static int floorDiv(int a, int b) {
-        int r = a / b;
-        if ((a ^ b) < 0 && (r * b != a)) r--;
-        return r;
-    }
-
-    private static long pack(int x, int z) {
-        return (((long) x) << 32) ^ (z & 0xFFFFFFFFL);
     }
 }

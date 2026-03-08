@@ -12,12 +12,10 @@ import java.util.Random;
 
 public class BirdSpawnController {
 
-    private Map<Long, ClientBird> birdsByIdRef;
-
     private final Map<String, Integer> countBySpecies = new HashMap<>();
     private final Map<String, Integer> remainingBySpecies = new HashMap<>();
     private final Map<String, Long> cooldownUntilTick = new HashMap<>();
-
+    private Map<Long, ClientBird> birdsByIdRef;
     private int globalRemaining = 0;
     private double cellChanceMul = 1.0;
 
@@ -62,7 +60,21 @@ public class BirdSpawnController {
         }
     }
 
-    /** Global soft target: each cell gets a deterministic chance to spawn anything */
+    private static double clamp01(double v) {
+        if (v < 0.0) return 0.0;
+        if (v > 1.0) return 1.0;
+        return v;
+    }
+
+    private static String speciesKey(BirdSpecies s) {
+        if (s.folderName != null && !s.folderName.trim().isEmpty()) return s.folderName.trim();
+        if (s.name != null && !s.name.trim().isEmpty()) return s.name.trim().toLowerCase(Locale.ROOT);
+        return "unknown";
+    }
+
+    /**
+     * Global soft target: each cell gets a deterministic chance to spawn anything
+     */
     public boolean allowCell(Random rng) {
         if (rng == null) return true;
         if (cellChanceMul >= 0.999) return true;
@@ -78,7 +90,9 @@ public class BirdSpawnController {
         return birdsByIdRef != null && birdsByIdRef.containsKey(birdId);
     }
 
-    /** Used at species selection time (so we can pick another species if this one is capped/cooldown). */
+    /**
+     * Used at species selection time (so we can pick another species if this one is capped/cooldown).
+     */
     public boolean canStartSpeciesSpawn(BirdSpecies species, long nowTick) {
         if (species == null) return false;
         if (globalRemaining <= 0) return false;
@@ -115,7 +129,9 @@ public class BirdSpawnController {
         return rem;
     }
 
-    /** Consume exactly 1 bird from budgets. DOES NOT apply cooldown (cooldown is applied only if something spawned). */
+    /**
+     * Consume exactly 1 bird from budgets. DOES NOT apply cooldown (cooldown is applied only if something spawned).
+     */
     public boolean consumeOne(BirdSpecies species) {
         if (species == null) return false;
         if (globalRemaining <= 0) return false;
@@ -135,7 +151,9 @@ public class BirdSpawnController {
         return true;
     }
 
-    /** Call once per spawn event (cell) if at least one bird actually spawned */
+    /**
+     * Call once per spawn event (cell) if at least one bird actually spawned
+     */
     public void markSpeciesSpawned(BirdSpecies species, long nowTick) {
         if (species == null || species.spawning == null) return;
 
@@ -148,17 +166,5 @@ public class BirdSpawnController {
 
     public void resetAllCooldowns() {
         cooldownUntilTick.clear();
-    }
-
-    private static String speciesKey(BirdSpecies s) {
-        if (s.folderName != null && !s.folderName.trim().isEmpty()) return s.folderName.trim();
-        if (s.name != null && !s.name.trim().isEmpty()) return s.name.trim().toLowerCase(Locale.ROOT);
-        return "unknown";
-    }
-
-    private static double clamp01(double v) {
-        if (v < 0.0) return 0.0;
-        if (v > 1.0) return 1.0;
-        return v;
     }
 }

@@ -18,8 +18,8 @@ public final class DefaultSpeciesExtractor {
 
     /**
      * If /config/jubitus/default_species exists:
-     *  - zip it to /config/jubitus/backup_old_species.zip
-     *  - delete the folder
+     * - zip it to /config/jubitus/backup_old_species.zip
+     * - delete the folder
      */
     public static void backupAndDeleteOldDefaultSpecies(FMLPreInitializationEvent event) {
         Path configDir = event.getModConfigurationDirectory().toPath(); // /config

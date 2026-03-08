@@ -1,8 +1,8 @@
 package com.jubitus.birds.render;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.util.ResourceLocation;
 import net.minecraft.client.resources.IResource;
+import net.minecraft.util.ResourceLocation;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -14,7 +14,8 @@ public final class BirdAvgColorCache {
 
     private static final Map<ResourceLocation, Integer> CACHE = new ConcurrentHashMap<>();
 
-    private BirdAvgColorCache() {}
+    private BirdAvgColorCache() {
+    }
 
     /**
      * Returns average RGB of the PNG, ignoring fully transparent pixels.
@@ -79,7 +80,9 @@ public final class BirdAvgColorCache {
         return (r << 16) | (g << 8) | b;
     }
 
-    /** If you ever reload textures and want to refresh colors. */
+    /**
+     * If you ever reload textures and want to refresh colors.
+     */
     public static void clear() {
         CACHE.clear();
     }

@@ -1,7 +1,6 @@
 package com.jubitus.birds.client;
 
 import com.jubitus.birds.client.config.BirdConfig;
-import com.jubitus.birds.client.config.JubitusBirdsConfig;
 import com.jubitus.birds.client.sound.BirdSoundSystem;
 import com.jubitus.birds.client.util.Flock;
 import com.jubitus.birds.client.util.FlockSpawner;

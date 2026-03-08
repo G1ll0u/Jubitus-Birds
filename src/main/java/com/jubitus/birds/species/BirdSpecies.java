@@ -153,7 +153,6 @@ public class BirdSpecies {
     public double flapSpeed = 0.35;
 
 
-
     // --- Loaded runtime textures ---
     /**
      * Filled by loader. Each entry is a runtime-registered texture
@@ -169,67 +168,6 @@ public class BirdSpecies {
     public OverrideBlock night = new OverrideBlock();
 
     public SilhouetteSettings silhouette = new SilhouetteSettings();
-
-    public static class SilhouetteSettings {
-        public int   alphaThreshold = 12;   // 0..255
-        public int   smoothRadius   = 1;    // 0..3
-        public float densityPow     = 1.8f; // higher => wings thinner
-        public float bellPow        = 1.2f; // higher => more taper head/tail
-        public float thickGain      = 0.48f;// overall thickness multiplier
-        public float coreWidthFact  = 0.4f; // 0..1
-        public float coreThickFact  = 0.80f;// 0..1
-
-        /** Optional: allow per-species ring count too. */
-        public int ringCount = 7;           // low poly rings (>=3)
-
-        public void clamp() {
-            alphaThreshold = clampInt(alphaThreshold, 0, 250);
-            smoothRadius   = clampInt(smoothRadius, 0, 6);
-            ringCount      = clampInt(ringCount, 3, 64);
-
-            densityPow     = clampF(densityPow, 0.01f, 8.0f);
-            bellPow        = clampF(bellPow, 0.01f, 8.0f);
-
-            thickGain      = clampF(thickGain, 0.0f, 4.0f);
-            coreWidthFact  = clampF(coreWidthFact, 0.0f, 1.0f);
-            coreThickFact  = clampF(coreThickFact, 0.0f, 1.0f);
-        }
-
-        private static int clampInt(int v, int lo, int hi) {
-            return (v < lo) ? lo : (v > hi) ? hi : v;
-        }
-        private static float clampF(float v, float lo, float hi) {
-            return (v < lo) ? lo : (v > hi) ? hi : v;
-        }
-
-        /** Used for caching: “same values = same key” */
-        public int stableHash() {
-            int h = 1;
-            h = 31*h + alphaThreshold;
-            h = 31*h + smoothRadius;
-            h = 31*h + ringCount;
-            h = 31*h + Float.floatToIntBits(densityPow);
-            h = 31*h + Float.floatToIntBits(bellPow);
-            h = 31*h + Float.floatToIntBits(thickGain);
-            h = 31*h + Float.floatToIntBits(coreWidthFact);
-            h = 31*h + Float.floatToIntBits(coreThickFact);
-            return h;
-        }
-
-        public SilhouetteSettings copy() {
-            SilhouetteSettings s = new SilhouetteSettings();
-            s.alphaThreshold = this.alphaThreshold;
-            s.smoothRadius   = this.smoothRadius;
-            s.ringCount      = this.ringCount;
-            s.densityPow     = this.densityPow;
-            s.bellPow        = this.bellPow;
-            s.thickGain      = this.thickGain;
-            s.coreWidthFact  = this.coreWidthFact;
-            s.coreThickFact  = this.coreThickFact;
-            return s;
-        }
-    }
-
 
     public void clampAndFix() {
 
@@ -305,6 +243,13 @@ public class BirdSpecies {
         if (night.soundMul != null) night.soundMul = clampD(night.soundMul, 0.0, 8.0, 1.0);
     }
 
+    // small shared helper for new classes
+    private static double clampD(double v, double lo, double hi, double def) {
+        if (Double.isNaN(v) || Double.isInfinite(v)) return def;
+        if (v < lo) return lo;
+        if (v > hi) return hi;
+        return v;
+    }
 
     /**
      * Deterministic selection based on birdSeed
@@ -320,6 +265,70 @@ public class BirdSpecies {
         return new BirdSpeciesView(this, o);
     }
 
+    public static class SilhouetteSettings {
+        public int alphaThreshold = 12;   // 0..255
+        public int smoothRadius = 1;    // 0..3
+        public float densityPow = 1.8f; // higher => wings thinner
+        public float bellPow = 1.2f; // higher => more taper head/tail
+        public float thickGain = 0.48f;// overall thickness multiplier
+        public float coreWidthFact = 0.4f; // 0..1
+        public float coreThickFact = 0.80f;// 0..1
+
+        /**
+         * Optional: allow per-species ring count too.
+         */
+        public int ringCount = 7;           // low poly rings (>=3)
+
+        public void clamp() {
+            alphaThreshold = clampInt(alphaThreshold, 0, 250);
+            smoothRadius = clampInt(smoothRadius, 0, 6);
+            ringCount = clampInt(ringCount, 3, 64);
+
+            densityPow = clampF(densityPow, 0.01f, 8.0f);
+            bellPow = clampF(bellPow, 0.01f, 8.0f);
+
+            thickGain = clampF(thickGain, 0.0f, 4.0f);
+            coreWidthFact = clampF(coreWidthFact, 0.0f, 1.0f);
+            coreThickFact = clampF(coreThickFact, 0.0f, 1.0f);
+        }
+
+        private static int clampInt(int v, int lo, int hi) {
+            return (v < lo) ? lo : (v > hi) ? hi : v;
+        }
+
+        private static float clampF(float v, float lo, float hi) {
+            return (v < lo) ? lo : (v > hi) ? hi : v;
+        }
+
+        /**
+         * Used for caching: “same values = same key”
+         */
+        public int stableHash() {
+            int h = 1;
+            h = 31 * h + alphaThreshold;
+            h = 31 * h + smoothRadius;
+            h = 31 * h + ringCount;
+            h = 31 * h + Float.floatToIntBits(densityPow);
+            h = 31 * h + Float.floatToIntBits(bellPow);
+            h = 31 * h + Float.floatToIntBits(thickGain);
+            h = 31 * h + Float.floatToIntBits(coreWidthFact);
+            h = 31 * h + Float.floatToIntBits(coreThickFact);
+            return h;
+        }
+
+        public SilhouetteSettings copy() {
+            SilhouetteSettings s = new SilhouetteSettings();
+            s.alphaThreshold = this.alphaThreshold;
+            s.smoothRadius = this.smoothRadius;
+            s.ringCount = this.ringCount;
+            s.densityPow = this.densityPow;
+            s.bellPow = this.bellPow;
+            s.thickGain = this.thickGain;
+            s.coreWidthFact = this.coreWidthFact;
+            s.coreThickFact = this.coreThickFact;
+            return s;
+        }
+    }
 
     public static class OverrideBlock {
         // If a value is null, it means "no override"
@@ -422,17 +431,18 @@ public class BirdSpecies {
     public static class BirdSpeciesView {
         private final BirdSpecies base;
         private final OverrideBlock o;
+
+        public BirdSpeciesView(BirdSpecies base, OverrideBlock o) {
+            this.base = base;
+            this.o = (o != null) ? o : new OverrideBlock();
+        }
+
         public double spawnMul() {
             return (o.spawnMul != null) ? o.spawnMul : 1.0;
         }
 
         public double soundMul() {
             return (o.soundMul != null) ? o.soundMul : 1.0;
-        }
-
-        public BirdSpeciesView(BirdSpecies base, OverrideBlock o) {
-            this.base = base;
-            this.o = (o != null) ? o : new OverrideBlock();
         }
 
         // Sound
@@ -741,6 +751,7 @@ public class BirdSpecies {
             return (o.soundPitchVariation != null) ? o.soundPitchVariation : base.soundPitchVariation;
         }
     }
+
     public static class SpawningSettings {
         // 0 = unlimited (uses global cap only)
         public int maxAroundPlayer = 0;
@@ -764,8 +775,10 @@ public class BirdSpecies {
             if (cooldownAfterSpawnTicks < 0) cooldownAfterSpawnTicks = 0;
             if (cooldownAfterSpawnTicks > 20 * 60 * 60) cooldownAfterSpawnTicks = 20 * 60 * 60;
 
-            if (Double.isNaN(minSpawnDistanceFromPlayer) || minSpawnDistanceFromPlayer < 0) minSpawnDistanceFromPlayer = 0.0;
-            if (Double.isNaN(maxSpawnDistanceFromPlayer) || maxSpawnDistanceFromPlayer < 0) maxSpawnDistanceFromPlayer = 0.0;
+            if (Double.isNaN(minSpawnDistanceFromPlayer) || minSpawnDistanceFromPlayer < 0)
+                minSpawnDistanceFromPlayer = 0.0;
+            if (Double.isNaN(maxSpawnDistanceFromPlayer) || maxSpawnDistanceFromPlayer < 0)
+                maxSpawnDistanceFromPlayer = 0.0;
 
             if (minSpawnDistanceFromPlayer > 8192.0) minSpawnDistanceFromPlayer = 8192.0;
             if (maxSpawnDistanceFromPlayer > 8192.0) maxSpawnDistanceFromPlayer = 8192.0;
@@ -930,14 +943,6 @@ public class BirdSpecies {
             if (callCooldownTicks < 0) callCooldownTicks = 0;
             if (callCooldownTicks > 20 * 60) callCooldownTicks = 20 * 60;
         }
-    }
-
-    // small shared helper for new classes
-    private static double clampD(double v, double lo, double hi, double def) {
-        if (Double.isNaN(v) || Double.isInfinite(v)) return def;
-        if (v < lo) return lo;
-        if (v > hi) return hi;
-        return v;
     }
 
 }

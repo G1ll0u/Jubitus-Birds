@@ -13,60 +13,26 @@ import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
-import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
 
-import java.nio.IntBuffer;
 import java.util.Collection;
 
 public class RenderBird {
 
     private static final BirdSpecies.SilhouetteSettings DEFAULT_SIL = new BirdSpecies.SilhouetteSettings();
-
-
-    private enum LOD { HIGH, MED, LOW, ULTRA }
     private static final double LOD_HYST = 8.0; // blocks of “stickiness”
-
     // Tune these
     private static final double LOD_HIGH_DIST = 32.0;      // blocks
-    private static final double LOD_MED_DIST  = 64.0;
-    private static final double LOD_LOW_DIST  = 128.0;      // beyond this -> ULTRA
-    private static final double CULL_EXTRA    = 2.0;       // bbox padding
+    private static final double LOD_MED_DIST = 64.0;
+    private static final double LOD_LOW_DIST = 128.0;      // beyond this -> ULTRA
+    private static final double CULL_EXTRA = 2.0;       // bbox padding
     private static final int ULTRA_RINGS = 4; // 3..6 is typical
-
     private static final byte LOD_HIGH = 0;
-    private static final byte LOD_MED  = 1;
-    private static final byte LOD_LOW  = 2;
-    private static final byte LOD_ULTRA= 3;
-
+    private static final byte LOD_MED = 1;
+    private static final byte LOD_LOW = 2;
+    private static final byte LOD_ULTRA = 3;
     // update LOD only every N ticks per bird (cheap + avoids thrash)
     private static final int LOD_UPDATE_EVERY_TICKS = 5;
-
-    private static byte pickLodHysteresis(ClientBird b, double dist) {
-        // only update sometimes (prevents constant flipping)
-        if ((b.ageTicks % LOD_UPDATE_EVERY_TICKS) != 0 && b.renderLod >= 0) {
-            return b.renderLod;
-        }
-
-        byte lod = (b.renderLod < 0) ? LOD_HIGH : b.renderLod;
-
-        // Hysteresis boundaries:
-        // - To go UP in detail (closer): use threshold - HYST
-        // - To go DOWN in detail (farther): use threshold + HYST
-
-        // Going farther (reduce detail)
-        if (lod == LOD_HIGH && dist > (LOD_HIGH_DIST + LOD_HYST)) lod = LOD_MED;
-        else if (lod == LOD_MED && dist > (LOD_MED_DIST + LOD_HYST)) lod = LOD_LOW;
-        else if (lod == LOD_LOW && dist > (LOD_LOW_DIST + LOD_HYST)) lod = LOD_ULTRA;
-
-            // Going closer (increase detail)
-        else if (lod == LOD_ULTRA && dist < (LOD_LOW_DIST - LOD_HYST)) lod = LOD_LOW;
-        else if (lod == LOD_LOW   && dist < (LOD_MED_DIST - LOD_HYST)) lod = LOD_MED;
-        else if (lod == LOD_MED   && dist < (LOD_HIGH_DIST - LOD_HYST)) lod = LOD_HIGH;
-
-        b.renderLod = lod;
-        return lod;
-    }
 
     public static void renderAll(Collection<ClientBird> birds, float partialTicks) {
         Minecraft mc = Minecraft.getMinecraft();
@@ -185,19 +151,6 @@ public class RenderBird {
         }
     }
 
-
-
-    private static double clamp01(double v) {
-        if (v < 0.0) return 0.0;
-        if (v > 1.0) return 1.0;
-        return v;
-    }
-
-    private static float lerpAngle(float a, float b, float t) {
-        float delta = wrapDegrees(b - a);
-        return a + delta * t;
-    }
-
     private static float fogFadeAlpha(Minecraft mc, Vec3d camPos, double wx, double wy, double wz) {
         // distance from camera to bird
         double dx = wx - camPos.x;
@@ -226,12 +179,32 @@ public class RenderBird {
         return (float) a;
     }
 
-    private static float wrapDegrees(float deg) {
-        deg = deg % 360.0f;
-        if (deg >= 180.0f) deg -= 360.0f;
-        if (deg < -180.0f) deg += 360.0f;
-        return deg;
+    private static byte pickLodHysteresis(ClientBird b, double dist) {
+        // only update sometimes (prevents constant flipping)
+        if ((b.ageTicks % LOD_UPDATE_EVERY_TICKS) != 0 && b.renderLod >= 0) {
+            return b.renderLod;
+        }
+
+        byte lod = (b.renderLod < 0) ? LOD_HIGH : b.renderLod;
+
+        // Hysteresis boundaries:
+        // - To go UP in detail (closer): use threshold - HYST
+        // - To go DOWN in detail (farther): use threshold + HYST
+
+        // Going farther (reduce detail)
+        if (lod == LOD_HIGH && dist > (LOD_HIGH_DIST + LOD_HYST)) lod = LOD_MED;
+        else if (lod == LOD_MED && dist > (LOD_MED_DIST + LOD_HYST)) lod = LOD_LOW;
+        else if (lod == LOD_LOW && dist > (LOD_LOW_DIST + LOD_HYST)) lod = LOD_ULTRA;
+
+            // Going closer (increase detail)
+        else if (lod == LOD_ULTRA && dist < (LOD_LOW_DIST - LOD_HYST)) lod = LOD_LOW;
+        else if (lod == LOD_LOW && dist < (LOD_MED_DIST - LOD_HYST)) lod = LOD_MED;
+        else if (lod == LOD_MED && dist < (LOD_HIGH_DIST - LOD_HYST)) lod = LOD_HIGH;
+
+        b.renderLod = lod;
+        return lod;
     }
+
     private static void renderOneLOD(ClientBird b, Vec3d camPos, float partialTicks, LOD lod, float fogAlpha) {
         Minecraft mc = Minecraft.getMinecraft();
 
@@ -271,7 +244,6 @@ public class RenderBird {
 
         double scale = b.getScale();
         GlStateManager.scale(scale, scale, scale);
-
 
 
         // ✅ Lightmap every time (this fixes black blinking)
@@ -443,7 +415,21 @@ public class RenderBird {
         GlStateManager.popMatrix();
     }
 
-    /** Copy of your old tilt logic, simplified. Remove if you don't want it. */
+    private static float lerpAngle(float a, float b, float t) {
+        float delta = wrapDegrees(b - a);
+        return a + delta * t;
+    }
+
+    private static float wrapDegrees(float deg) {
+        deg = deg % 360.0f;
+        if (deg >= 180.0f) deg -= 360.0f;
+        if (deg < -180.0f) deg += 360.0f;
+        return deg;
+    }
+
+    /**
+     * Copy of your old tilt logic, simplified. Remove if you don't want it.
+     */
     private static void applyCameraTilt(Vec3d camPos, double ix, double iy, double iz) {
         double cx = camPos.x - ix;
         double cy = camPos.y - iy;
@@ -470,6 +456,12 @@ public class RenderBird {
         GlStateManager.rotate(tiltX, 1f, 0f, 0f);
     }
 
+    private static double clamp01(double v) {
+        if (v < 0.0) return 0.0;
+        if (v > 1.0) return 1.0;
+        return v;
+    }
+
     private static void drawBillboardQuad(double halfW, double halfL) {
         double zHead = +halfL;
         double zTail = -halfL;
@@ -486,5 +478,7 @@ public class RenderBird {
 
         tess.draw();
     }
+
+    private enum LOD {HIGH, MED, LOW, ULTRA}
 
 }

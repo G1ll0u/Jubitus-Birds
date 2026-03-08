@@ -271,7 +271,6 @@ public class BirdCallSound extends MovingSound {
         this.volume = baseVolume * gain * occGain * underwaterGainMul;
 
 
-
 // Optional: tiny pitch drop when thick occluded (feels muffled)
         this.pitch = basePitch * lerp(1.0f, 0.96f, Math.min(1.0f, thicknessSmooth / 12.0f)) * underwaterPitchMul;
 

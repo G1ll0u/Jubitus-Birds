@@ -10,67 +10,38 @@ import net.minecraftforge.fml.relauncher.SideOnly;
 
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 @SideOnly(Side.CLIENT)
 public final class BirdSilhouetteCache {
     private static final java.util.Map<ResourceLocation, BufferedImage> SOURCE_IMG =
             new java.util.concurrent.ConcurrentHashMap<>();
-
-    public static final class Shape {
-        public final LoftedBirdMesh.SilhouetteProfile outer;
-        public final LoftedBirdMesh.SilhouetteProfile core;
-        public final java.util.Map<Integer, LoftedBirdMesh.SilhouetteProfile> outerLod = new java.util.concurrent.ConcurrentHashMap<>();
-        public final java.util.Map<Integer, LoftedBirdMesh.SilhouetteProfile> coreLod  = new java.util.concurrent.ConcurrentHashMap<>();
-        public final int avgRGB; // 0xRRGGBB
-
-        private Shape(LoftedBirdMesh.SilhouetteProfile outer,
-                      LoftedBirdMesh.SilhouetteProfile core,
-                      int avgRGB) {
-            this.outer = outer;
-            this.core = core;
-            this.avgRGB = avgRGB;
-        }
-    }
-
-    private static final class Key {
-        final ResourceLocation tex;
-        final int settingsHash;
-
-        Key(ResourceLocation tex, int settingsHash) {
-            this.tex = tex;
-            this.settingsHash = settingsHash;
-        }
-
-        @Override public boolean equals(Object o) {
-            if (!(o instanceof Key)) return false;
-            Key k = (Key) o;
-            return settingsHash == k.settingsHash && tex.equals(k.tex);
-        }
-
-        @Override public int hashCode() {
-            return 31 * tex.hashCode() + settingsHash;
-        }
-    }
-
     private static final java.util.Map<Key, Shape> CACHE = new java.util.concurrent.ConcurrentHashMap<>();
 
-    private BirdSilhouetteCache() {}
+    private BirdSilhouetteCache() {
+    }
 
     public static void clear() {
         CACHE.clear();
         SOURCE_IMG.clear();
     }
 
-
-    /** Fast lookup. Returns null if not built. */
+    /**
+     * Fast lookup. Returns null if not built.
+     */
     public static Shape get(ResourceLocation tex, BirdSpecies.SilhouetteSettings settings) {
         if (tex == null || settings == null) return null;
         return CACHE.get(new Key(tex, settings.stableHash()));
     }
 
-    /** Convenience: builds from resource manager if needed. */
+    public static LoftedBirdMesh.SilhouetteProfile getOuterLod(ResourceLocation tex, BirdSpecies.SilhouetteSettings settings, int rings) {
+        Shape s = getOrBuild(tex, settings);
+        if (s == null || s.outer == null) return null;
+        return s.outerLod.computeIfAbsent(rings, k -> downsampleProfile(s.outer, k));
+    }
+
+    /**
+     * Convenience: builds from resource manager if needed.
+     */
     public static Shape getOrBuild(ResourceLocation tex, BirdSpecies.SilhouetteSettings settings) {
         if (tex == null) return null;
         if (settings == null) settings = new BirdSpecies.SilhouetteSettings();
@@ -107,18 +78,6 @@ public final class BirdSilhouetteCache {
         }
     }
 
-    public static LoftedBirdMesh.SilhouetteProfile getOuterLod(ResourceLocation tex, BirdSpecies.SilhouetteSettings settings, int rings) {
-        Shape s = getOrBuild(tex, settings);
-        if (s == null || s.outer == null) return null;
-        return s.outerLod.computeIfAbsent(rings, k -> downsampleProfile(s.outer, k));
-    }
-
-    public static LoftedBirdMesh.SilhouetteProfile getCoreLod(ResourceLocation tex, BirdSpecies.SilhouetteSettings settings, int rings) {
-        Shape s = getOrBuild(tex, settings);
-        if (s == null || s.core == null) return null;
-        return s.coreLod.computeIfAbsent(rings, k -> downsampleProfile(s.core, k));
-    }
-
     private static LoftedBirdMesh.SilhouetteProfile downsampleProfile(LoftedBirdMesh.SilhouetteProfile src, int rings) {
         int n = src.count();
         if (rings >= n) return src;
@@ -132,7 +91,7 @@ public final class BirdSilhouetteCache {
         float[] thick = new float[rings];
 
         for (int i = 0; i < rings; i++) {
-            float s = (rings == 1) ? 0f : (i / (float)(rings - 1));
+            float s = (rings == 1) ? 0f : (i / (float) (rings - 1));
             int idx = Math.round(s * (n - 1));
 
             t[i] = src.t[idx];
@@ -150,11 +109,11 @@ public final class BirdSilhouetteCache {
     // ---------------------
     private static Shape buildShape(BufferedImage img, BirdSpecies.SilhouetteSettings S) {
         final int ALPHA_THRESHOLD = S.alphaThreshold;
-        final int SMOOTH_RADIUS   = S.smoothRadius;
-        final int RING_COUNT      = S.ringCount;
-        final float DENSITY_POW   = S.densityPow;
-        final float BELL_POW      = S.bellPow;
-        final float THICK_GAIN    = S.thickGain;
+        final int SMOOTH_RADIUS = S.smoothRadius;
+        final int RING_COUNT = S.ringCount;
+        final float DENSITY_POW = S.densityPow;
+        final float BELL_POW = S.bellPow;
+        final float THICK_GAIN = S.thickGain;
         final float CORE_WIDTH_FACT = S.coreWidthFact;
         final float CORE_THICK_FACT = S.coreThickFact;
 
@@ -167,7 +126,7 @@ public final class BirdSilhouetteCache {
         float[] densRow = new float[h];
         boolean[] hasRow = new boolean[h];
 
-        long rSum=0,gSum=0,bSum=0, aSum=0;
+        long rSum = 0, gSum = 0, bSum = 0, aSum = 0;
         int yHead = -1, yTail = -1;
 
         for (int y = 0; y < h; y++) {
@@ -251,8 +210,8 @@ public final class BirdSilhouetteCache {
 
         float[] uMinCore = new float[ringN];
         float[] uMaxCore = new float[ringN];
-        float[] uCCore   = new float[ringN];
-        float[] thickCore= new float[ringN];
+        float[] uCCore = new float[ringN];
+        float[] thickCore = new float[ringN];
 
         for (int i = 0; i < ringN; i++) {
             float t = (ringN == 1) ? 0f : (i / (float) (ringN - 1));
@@ -292,13 +251,17 @@ public final class BirdSilhouetteCache {
         }
 
         int avgRGB = (aSum > 0)
-                ? (((int)(rSum / aSum) & 255) << 16) | (((int)(gSum / aSum) & 255) << 8) | ((int)(bSum / aSum) & 255)
+                ? (((int) (rSum / aSum) & 255) << 16) | (((int) (gSum / aSum) & 255) << 8) | ((int) (bSum / aSum) & 255)
                 : 0x6B6B6B;
 
         LoftedBirdMesh.SilhouetteProfile outer = new LoftedBirdMesh.SilhouetteProfile(tArr, vArr, uMinArr, uMaxArr, uCArr, thickArr);
-        LoftedBirdMesh.SilhouetteProfile core  = new LoftedBirdMesh.SilhouetteProfile(tArr, vArr, uMinCore, uMaxCore, uCCore, thickCore);
+        LoftedBirdMesh.SilhouetteProfile core = new LoftedBirdMesh.SilhouetteProfile(tArr, vArr, uMinCore, uMaxCore, uCCore, thickCore);
 
         return new Shape(outer, core, avgRGB);
+    }
+
+    private static float clamp01(float v) {
+        return (v < 0f) ? 0f : (v > 1f) ? 1f : v;
     }
 
     private static float smoothAt(float[] arr, boolean[] has, int idx, int r, float fallback, int h) {
@@ -317,13 +280,16 @@ public final class BirdSilhouetteCache {
         return a + (b - a) * t;
     }
 
-    private static float clamp01(float v) {
-        return (v < 0f) ? 0f : (v > 1f) ? 1f : v;
-    }
-
     private static int clampInt(int v, int lo, int hi) {
         return (v < lo) ? lo : (v > hi) ? hi : v;
     }
+
+    public static LoftedBirdMesh.SilhouetteProfile getCoreLod(ResourceLocation tex, BirdSpecies.SilhouetteSettings settings, int rings) {
+        Shape s = getOrBuild(tex, settings);
+        if (s == null || s.core == null) return null;
+        return s.coreLod.computeIfAbsent(rings, k -> downsampleProfile(s.core, k));
+    }
+
     public static void putBuilt(ResourceLocation tex, BirdSpecies.SilhouetteSettings settings, BufferedImage img) {
         if (tex == null || img == null) return;
         if (settings == null) settings = new BirdSpecies.SilhouetteSettings();
@@ -339,6 +305,44 @@ public final class BirdSilhouetteCache {
             CACHE.put(new Key(tex, s2.stableHash()), built);
         }
 
+    }
+
+    public static final class Shape {
+        public final LoftedBirdMesh.SilhouetteProfile outer;
+        public final LoftedBirdMesh.SilhouetteProfile core;
+        public final java.util.Map<Integer, LoftedBirdMesh.SilhouetteProfile> outerLod = new java.util.concurrent.ConcurrentHashMap<>();
+        public final java.util.Map<Integer, LoftedBirdMesh.SilhouetteProfile> coreLod = new java.util.concurrent.ConcurrentHashMap<>();
+        public final int avgRGB; // 0xRRGGBB
+
+        private Shape(LoftedBirdMesh.SilhouetteProfile outer,
+                      LoftedBirdMesh.SilhouetteProfile core,
+                      int avgRGB) {
+            this.outer = outer;
+            this.core = core;
+            this.avgRGB = avgRGB;
+        }
+    }
+
+    private static final class Key {
+        final ResourceLocation tex;
+        final int settingsHash;
+
+        Key(ResourceLocation tex, int settingsHash) {
+            this.tex = tex;
+            this.settingsHash = settingsHash;
+        }
+
+        @Override
+        public int hashCode() {
+            return 31 * tex.hashCode() + settingsHash;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (!(o instanceof Key)) return false;
+            Key k = (Key) o;
+            return settingsHash == k.settingsHash && tex.equals(k.tex);
+        }
     }
 
 }

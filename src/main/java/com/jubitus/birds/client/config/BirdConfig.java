@@ -152,7 +152,6 @@ public class BirdConfig {
         if (loftCapOffset > 0.30) loftCapOffset = 0.30;
 
 
-
     }
 
 }

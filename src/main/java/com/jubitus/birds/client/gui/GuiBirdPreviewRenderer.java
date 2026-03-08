@@ -4,18 +4,15 @@ import com.jubitus.birds.render.BirdSilhouetteCache;
 import com.jubitus.birds.render.LoftedBirdMesh;
 import com.jubitus.birds.species.BirdSpecies;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.ScaledResolution;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.OpenGlHelper;
 import net.minecraft.util.ResourceLocation;
-import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
-
-import java.nio.IntBuffer;
 
 public final class GuiBirdPreviewRenderer {
 
-    private GuiBirdPreviewRenderer() {}
+    private GuiBirdPreviewRenderer() {
+    }
 
     public static boolean drawSilhouetteTurntable(ResourceLocation tex,
                                                   BirdSpecies.SilhouetteSettings sil,

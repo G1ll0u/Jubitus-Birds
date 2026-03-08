@@ -5,7 +5,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiSlot;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.util.ResourceLocation;
-import org.lwjgl.opengl.GL11;
 
 public class SpeciesSlotList extends GuiSlot {
 
@@ -54,7 +53,8 @@ public class SpeciesSlotList extends GuiSlot {
     }
 
     @Override
-    protected void drawBackground() { }
+    protected void drawBackground() {
+    }
 
     @Override
     protected void drawSlot(int index, int x, int y, int heightIn, int mouseXIn, int mouseYIn, float partialTicks) {
@@ -135,6 +135,15 @@ public class SpeciesSlotList extends GuiSlot {
         }
     }
 
+    @Override
+    public int getListWidth() {
+        return this.right - this.left;
+    }
+
+    @Override
+    protected int getScrollBarX() {
+        return this.right - 6; // ✅ scrollbar always at the right edge of the list
+    }
 
     private boolean isMouseOverPreview(int rowY, int heightIn, int mouseX, int mouseY) {
         int scrollbarX = this.getScrollBarX();
@@ -164,16 +173,6 @@ public class SpeciesSlotList extends GuiSlot {
         int y1 = cy + (size / 2) + PREVIEW_FRAME_PAD + PREVIEW_PAD;
 
         return mouseX >= x0 && mouseX <= x1 && mouseY >= y0 && mouseY <= y1;
-    }
-
-    @Override
-    public int getListWidth() {
-        return this.right - this.left;
-    }
-
-    @Override
-    protected int getScrollBarX() {
-        return this.right - 6; // ✅ scrollbar always at the right edge of the list
     }
 
 }

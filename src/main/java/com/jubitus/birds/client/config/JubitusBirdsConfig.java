@@ -8,7 +8,6 @@ import net.minecraftforge.common.config.Config;
 public class JubitusBirdsConfig {
 
 
-
     @Config.Name("render")
     public static final Render RENDER = new Render();
 
@@ -202,6 +201,7 @@ public class JubitusBirdsConfig {
         @Config.RangeInt(min = 0, max = 8)
         public int spawnRadiusCells = 2;
     }
+
     public static class Render {
 
         @Config.Comment({

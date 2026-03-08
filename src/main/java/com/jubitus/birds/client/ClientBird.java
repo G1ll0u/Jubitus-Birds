@@ -10,66 +10,43 @@ import com.jubitus.birds.client.util.BirdOrientation;
 import com.jubitus.birds.client.util.BirdSteering;
 import com.jubitus.birds.client.util.FlockingRules;
 import com.jubitus.birds.species.BirdSpecies;
-import net.minecraft.client.Minecraft;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.SoundEvent;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.RayTraceResult;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.World;
-
-import java.util.Random;
 
 public class ClientBird {
 
-    public byte renderLod = -1;
-    public int lodUpdateTicker = 0;
-
     private static final double MAX_CLIMB_PER_TICK = 0.20;
     private static final double COLLISION_BUFFER = 1.0;
-
     public final BirdSpecies species;
     public final BirdOrientation orientation = new BirdOrientation();
     public final net.minecraft.util.ResourceLocation texture;
-
     private final long birdSeed;
     private final java.util.Random rng;
-
     // Individual variation (multipliers)
     private final double scaleMul;
     private final double speedMul;
     private final double flapAmpMul;
     private final double flapSpeedMul;
     private final double callPitchMul;
-
+    // Per-bird flocking params (filled from species each tick; avoids shared static)
+    private final FlockingRules.Params flockParams = new FlockingRules.Params();
+    public byte renderLod = -1;
+    public int lodUpdateTicker = 0;
     public int ageTicks = 0;
     public net.minecraft.util.math.Vec3d pos;
     public net.minecraft.util.math.Vec3d vel;
     public long flockId = 0L;
     public net.minecraft.util.math.Vec3d prevPos;
-
     public float prevYaw, prevPitch, prevRoll;
-
     private long nextCallWorldTick = -1;
     private long lastCallWorldTick = -999999L;
-
     private double smoothVy = 0.0;
-
     private net.minecraft.util.math.Vec3d forward;
     private net.minecraft.util.math.Vec3d waypoint;
-
     private net.minecraft.util.math.Vec3d circleCenter;
     private double circleRadius;
-
     private int modeTicksLeft;
     private int modeTicksTotal;
-
     private Mode mode;
-
     private net.minecraft.util.math.Vec3d lastForwardXZ = new net.minecraft.util.math.Vec3d(0, 0, 1);
-
-    // Per-bird flocking params (filled from species each tick; avoids shared static)
-    private final FlockingRules.Params flockParams = new FlockingRules.Params();
 
     public ClientBird(net.minecraft.world.World world, BirdSpecies species, long birdSeed,
                       net.minecraft.util.math.Vec3d startPos,
@@ -108,28 +85,16 @@ public class ClientBird {
     // Public getters for renderer
     // -------------------
 
-    public double getScale() {
-        double base = (species != null) ? species.scale : 0.45;
-        return base * scaleMul;
+    private static double clampMul(double v, double lo, double hi) {
+        if (v < lo) return lo;
+        if (v > hi) return hi;
+        return v;
     }
 
-    public double getFlapAmplitude() {
-        double base = (species != null) ? species.flapAmplitude : 0.08;
-        return base * flapAmpMul;
+    private double jitter(double frac) {
+        frac = clamp(frac, 0.0, 0.90);
+        return (rng.nextDouble() * 2.0 - 1.0) * frac;
     }
-
-    public double getFlapSpeed() {
-        double base = (species != null) ? species.flapSpeed : 0.35;
-        return base * flapSpeedMul;
-    }
-
-    public long getId() {
-        return birdSeed;
-    }
-
-    // -------------------
-    // Modes
-    // -------------------
 
     private void pickNewMode(net.minecraft.world.World world, boolean first) {
         if (species == null) {
@@ -226,6 +191,40 @@ public class ClientBird {
         }
     }
 
+    private void scheduleNextCall(net.minecraft.world.World world, long now, BirdSpecies.SoundView sv, double soundMul, boolean firstSchedule) {
+        int base = sv.soundBaseIntervalTicks();
+
+        // soundMul > 1 => calls more often; < 1 => calls less often
+        double m = clamp(soundMul, 0.05, 8.0);
+        base = (int) Math.round(base / m);
+        if (base < 20) base = 20;
+
+        double r = sv.soundRandomness();
+        double factor = 1.0;
+        if (r > 0) {
+            factor = (1.0 - r) + (rng.nextDouble() * (2.0 * r));
+        }
+
+        long delay = Math.max(20, Math.round(base * factor));
+
+        long extraPhase = 0;
+        if (firstSchedule) {
+            long cap = Math.min(600L, base);
+            extraPhase = (cap > 0) ? (long) (rng.nextDouble() * cap) : 0;
+        }
+
+        long seedOffset = (birdSeed & 255L);
+        nextCallWorldTick = now + delay + seedOffset + extraPhase;
+    }
+
+    // -------------------
+    // Modes
+    // -------------------
+
+    private static double clamp(double v, double lo, double hi) {
+        return Math.max(lo, Math.min(hi, v));
+    }
+
     private void pickGlideWaypoint(net.minecraft.world.World world) {
         double dist = 80 + rng.nextDouble() * 140;
         double ang = Math.atan2(forward.z, forward.x) + (rng.nextDouble() - 0.5) * Math.toRadians(50);
@@ -240,6 +239,18 @@ public class ClientBird {
         double desiredAbove = clamp(targetAbove, v.minAltitudeAboveGround(), v.maxAltitudeAboveGround());
 
         waypoint = new net.minecraft.util.math.Vec3d(wx, gy + desiredAbove, wz);
+    }
+
+    private int randInt(int a, int b) {
+        return a + rng.nextInt(b - a + 1);
+    }
+
+    // -------------------
+    // Tick
+    // -------------------
+
+    private static double lerp(double a, double b, double t) {
+        return a + (b - a) * t;
     }
 
     private void pickSwoopWaypoint(net.minecraft.world.World world) {
@@ -260,9 +271,44 @@ public class ClientBird {
         waypoint = new net.minecraft.util.math.Vec3d(wx, gy + desiredAbove, wz);
     }
 
-    // -------------------
-    // Tick
-    // -------------------
+    private static double getGroundY(net.minecraft.world.World world, double x, double z) {
+        net.minecraft.util.math.BlockPos pos = new net.minecraft.util.math.BlockPos(x, 0, z);
+        net.minecraft.util.math.BlockPos top = world.getHeight(pos);
+        return top.getY();
+    }
+
+    private static float distanceToPlayer(net.minecraft.util.math.Vec3d soundPos) {
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getMinecraft();
+        if (mc == null || mc.player == null) return Float.MAX_VALUE;
+
+        double px = mc.player.posX;
+        double py = mc.player.posY + mc.player.getEyeHeight();
+        double pz = mc.player.posZ;
+
+        double dx = px - soundPos.x;
+        double dy = py - soundPos.y;
+        double dz = pz - soundPos.z;
+        return (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    public double getScale() {
+        double base = (species != null) ? species.scale : 0.45;
+        return base * scaleMul;
+    }
+
+    public double getFlapAmplitude() {
+        double base = (species != null) ? species.flapAmplitude : 0.08;
+        return base * flapAmpMul;
+    }
+
+    public double getFlapSpeed() {
+        double base = (species != null) ? species.flapSpeed : 0.35;
+        return base * flapSpeedMul;
+    }
+
+    public long getId() {
+        return birdSeed;
+    }
 
     public void tick(net.minecraft.world.World world, net.minecraft.util.math.Vec3d flockForward, java.util.List<ClientBird> neighbors) {
         if (world == null) return;
@@ -404,11 +450,9 @@ public class ClientBird {
         if (mode == Mode.CIRCLE) targetSpeed = lerp(minSp, maxSp, 0.35);
         else if (mode == Mode.SOAR && species != null && species.movement != null && species.movement.soar != null) {
             targetSpeed = lerp(minSp, maxSp, 0.45) * species.movement.soar.speedMul;
-        }
-        else if (mode == Mode.SWOOP && species != null && species.movement != null && species.movement.swoop != null) {
+        } else if (mode == Mode.SWOOP && species != null && species.movement != null && species.movement.swoop != null) {
             targetSpeed = lerp(minSp, maxSp, 0.75) * species.movement.swoop.diveSpeedMul;
-        }
-        else targetSpeed = lerp(minSp, maxSp, 0.65);
+        } else targetSpeed = lerp(minSp, maxSp, 0.65);
 
         speed = lerp(speed, targetSpeed, 0.03);
 
@@ -591,75 +635,6 @@ public class ClientBird {
         scheduleNextCall(world, now, sv, soundMul, false);
     }
 
-    private void scheduleNextCall(net.minecraft.world.World world, long now, BirdSpecies.SoundView sv, double soundMul, boolean firstSchedule) {
-        int base = sv.soundBaseIntervalTicks();
-
-        // soundMul > 1 => calls more often; < 1 => calls less often
-        double m = clamp(soundMul, 0.05, 8.0);
-        base = (int) Math.round(base / m);
-        if (base < 20) base = 20;
-
-        double r = sv.soundRandomness();
-        double factor = 1.0;
-        if (r > 0) {
-            factor = (1.0 - r) + (rng.nextDouble() * (2.0 * r));
-        }
-
-        long delay = Math.max(20, Math.round(base * factor));
-
-        long extraPhase = 0;
-        if (firstSchedule) {
-            long cap = Math.min(600L, base);
-            extraPhase = (cap > 0) ? (long) (rng.nextDouble() * cap) : 0;
-        }
-
-        long seedOffset = (birdSeed & 255L);
-        nextCallWorldTick = now + delay + seedOffset + extraPhase;
-    }
-
-    private static float distanceToPlayer(net.minecraft.util.math.Vec3d soundPos) {
-        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getMinecraft();
-        if (mc == null || mc.player == null) return Float.MAX_VALUE;
-
-        double px = mc.player.posX;
-        double py = mc.player.posY + mc.player.getEyeHeight();
-        double pz = mc.player.posZ;
-
-        double dx = px - soundPos.x;
-        double dy = py - soundPos.y;
-        double dz = pz - soundPos.z;
-        return (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
-    }
-
-    private int randInt(int a, int b) {
-        return a + rng.nextInt(b - a + 1);
-    }
-
-    private static double lerp(double a, double b, double t) {
-        return a + (b - a) * t;
-    }
-
-    private static double clamp(double v, double lo, double hi) {
-        return Math.max(lo, Math.min(hi, v));
-    }
-
-    private double jitter(double frac) {
-        frac = clamp(frac, 0.0, 0.90);
-        return (rng.nextDouble() * 2.0 - 1.0) * frac;
-    }
-
-    private static double clampMul(double v, double lo, double hi) {
-        if (v < lo) return lo;
-        if (v > hi) return hi;
-        return v;
-    }
-
-    private static double getGroundY(net.minecraft.world.World world, double x, double z) {
-        net.minecraft.util.math.BlockPos pos = new net.minecraft.util.math.BlockPos(x, 0, z);
-        net.minecraft.util.math.BlockPos top = world.getHeight(pos);
-        return top.getY();
-    }
-
     private double getGroundAheadY(net.minecraft.world.World world, double lookAheadDist) {
         net.minecraft.util.math.Vec3d f = new net.minecraft.util.math.Vec3d(forward.x, 0, forward.z);
         if (f.lengthSquared() < 1e-6) f = new net.minecraft.util.math.Vec3d(0, 0, 1);
@@ -702,5 +677,5 @@ public class ClientBird {
         return gMax + v.minAltitudeAboveGround();
     }
 
-    public enum Mode { GLIDE, CIRCLE, SOAR, SWOOP }
+    public enum Mode {GLIDE, CIRCLE, SOAR, SWOOP}
 }
