@@ -52,7 +52,7 @@
     "smoothRadius": 1,
     "densityPow": 1.8,
     "bellPow": 1.2,
-    "thickGain": 2,
+    "thickGain": 0.6,
     "coreWidthFact": 0.2,
     "coreThickFact": 0.8,
     "ringCount": 7

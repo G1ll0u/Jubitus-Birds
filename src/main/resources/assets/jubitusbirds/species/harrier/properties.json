@@ -55,7 +55,7 @@
     "thickGain": 0.4,
     "coreWidthFact": 0.2,
     "coreThickFact": 0.8,
-    "ringCount": 6
+    "ringCount": 7
   },
   "biomeRules": {
     "temperatureCategoryWhitelist": [
