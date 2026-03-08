@@ -258,8 +258,14 @@ public class BirdCallSound extends MovingSound {
         float floor = (float) BirdConfig.occludedGain; // 0..1
         if (thickGain < floor) thickGain = floor;
 
-// If nothing is blocked at all, don't apply thickness muffling (prevents “random muffling”)
-        float occGain = (occlusionSmooth <= 0.05f) ? 1.0f : thickGain;
+// Apply thickness muffling whenever we actually have thickness.
+// This makes a single wall matter (fraction-based gating was too strict).
+        float occGain;
+        if (thicknessSmooth <= 0.05f) {
+            occGain = 1.0f; // essentially clear line
+        } else {
+            occGain = thickGain;
+        }
 
 // Final volume
         this.volume = baseVolume * gain * occGain * underwaterGainMul;
@@ -352,10 +358,15 @@ public class BirdCallSound extends MovingSound {
             }
         }
 
-        float frac = (total <= 0) ? 0.0f : (blocked / (float) total);
-        if (thickness > maxT) thickness = maxT;
+// Better measure: fraction of the path that was inside occluders.
+// This does NOT shrink just because the source is farther away.
+        float frac = (dist <= 0.001) ? 0.0f : (thickness / (float) dist);
+        if (frac < 0f) frac = 0f;
+        if (frac > 1f) frac = 1f;
 
+        if (thickness > maxT) thickness = maxT;
         return new OcclusionInfo(frac, thickness);
+
     }
 
     private boolean countsAsOccluder(IBlockState st) {

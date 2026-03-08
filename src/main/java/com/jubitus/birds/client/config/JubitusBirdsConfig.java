@@ -7,6 +7,11 @@ import net.minecraftforge.common.config.Config;
 @Config(modid = Tags.MOD_ID, name = "jubitusbirds/jubitusbirds")
 public class JubitusBirdsConfig {
 
+
+    @Config.Name("render")
+    public static final Render RENDER = new Render();
+
+
     @Config.Name("borders")
     public static final Borders BORDERS = new Borders();
 
@@ -160,6 +165,16 @@ public class JubitusBirdsConfig {
         })
         @Config.RangeDouble(min = 0.0, max = 4096.0)
         public double despawnDistance = 256.0;
+
+        @Config.Comment({
+                "SOFT target of birds around the player (client-side).",
+                "Spawning slows down smoothly after this target, but can continue until the hard cap.",
+                "Must be <= maxBirdsAroundPlayer."
+        })
+        @Config.RangeInt(min = 0, max = 2048)
+        public int softTargetBirdsAroundPlayer = 48;
+
+
     }
 
     public static class Spawning {
@@ -177,7 +192,7 @@ public class JubitusBirdsConfig {
                 "Example: 20*12 = 12 seconds."
         })
         @Config.RangeInt(min = 1, max = 20 * 600)
-        public int spawnTimeWindowTicks = 20 * 30;
+        public int spawnTimeWindowTicks = 20 * 60;
 
         @Config.Comment({
                 "How many cells around the player to consider for spawning (Chebyshev radius).",
@@ -185,6 +200,35 @@ public class JubitusBirdsConfig {
         })
         @Config.RangeInt(min = 0, max = 8)
         public int spawnRadiusCells = 2;
+    }
+
+    public static class Render {
+
+        @Config.Comment({
+                "Bird rendering mode.",
+                "FLAT = old single quad",
+                "LOFTED_3D = low-poly 3D volume using the same texture"
+        })
+        public Mode mode = Mode.LOFTED_3D;
+
+        @Config.Comment({
+                "Only used for LOFTED_3D. Controls overall body thickness (volume).",
+                "Try 0.16 .. 0.35"
+        })
+        @Config.RangeDouble(min = 0.05, max = 0.80)
+        public double loftBaseThickness = 0.22;
+
+        @Config.Comment({
+                "Only used for LOFTED_3D. How pointy head/tail caps are.",
+                "Try 0.03 .. 0.10"
+        })
+        @Config.RangeDouble(min = 0.0, max = 0.30)
+        public double loftCapOffset = 0.06;
+
+        public enum Mode {
+            FLAT,
+            LOFTED_3D
+        }
     }
 
 }

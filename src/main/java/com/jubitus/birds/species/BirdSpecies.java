@@ -16,8 +16,25 @@ public class BirdSpecies {
     public SoundSettings soundSingle = null;
     public SoundSettings soundFlock = null;
 
-    // --- Sound (per default_species) ---
+    // --- Sound (per species) ---
     public boolean soundsEnabled = true;
+    // --- NEW: Per-species spawning controls + constraints ---
+    public SpawningSettings spawning = new SpawningSettings();
+
+    // --- NEW: Weather multipliers (spawn + sound) ---
+    public WeatherSettings weather = new WeatherSettings();
+
+    // --- NEW: Per-species flocking tuning ---
+    public FlockingSettings flocking = new FlockingSettings();
+
+    // --- NEW: Extra movement modes (SOAR + SWOOP) ---
+    public MovementSettings movement = new MovementSettings();
+
+    // --- NEW: Individual per-bird variation ranges ---
+    public VariationSettings variation = new VariationSettings();
+
+    // --- NEW: Sound anti-spam limiter settings ---
+    public SoundSpamSettings soundSpam = new SoundSpamSettings();
 
 
     /**
@@ -68,17 +85,17 @@ public class BirdSpecies {
     public boolean enabled = true;
 
     /**
-     * Relative weight when multiple default_species are allowed in a biome
+     * Relative weight when multiple species are allowed in a biome
      */
     public double spawnWeight = 1.0;
 
     /**
-     * Per-cell max (like your birdsPerCellMax but per default_species)
+     * Per-cell max (like your birdsPerCellMax but per species)
      */
     public int birdsPerCellMax = 8;
 
     /**
-     * Chance cell becomes a flock for THIS default_species
+     * Chance cell becomes a flock for THIS species
      */
     public double flockChancePerCell = 0.45;
 
@@ -103,7 +120,7 @@ public class BirdSpecies {
     public List<String> biomeWhitelist = new ArrayList<>();
     public List<String> biomeBlacklist = new ArrayList<>();
 
-    // --- Flight (default_species-specific) ---
+    // --- Flight (species-specific) ---
     public double minSpeed = 0.35;
     public double maxSpeed = 0.60;
 
@@ -135,6 +152,7 @@ public class BirdSpecies {
     public double flapAmplitude = 0.08;
     public double flapSpeed = 0.35;
 
+
     // --- Loaded runtime textures ---
     /**
      * Filled by loader. Each entry is a runtime-registered texture
@@ -149,14 +167,16 @@ public class BirdSpecies {
      */
     public OverrideBlock night = new OverrideBlock();
 
+    public SilhouetteSettings silhouette = new SilhouetteSettings();
+
     public void clampAndFix() {
 
-        // Sounds
+        // Sounds (legacy)
         if (soundPitch <= 0) soundPitch = 1.0;
         if (soundVolume < 0) soundVolume = 0.0;
-        if (soundVolume > 4.0) soundVolume = 4.0; // allow “power” but avoid insane values
+        if (soundVolume > 4.0) soundVolume = 4.0;
 
-        if (soundBaseIntervalTicks < 20) soundBaseIntervalTicks = 20; // at least 1s
+        if (soundBaseIntervalTicks < 20) soundBaseIntervalTicks = 20;
         if (Double.isNaN(soundRandomness)) soundRandomness = 0.35;
         soundRandomness = Math.max(0.0, Math.min(1.0, soundRandomness));
 
@@ -179,7 +199,7 @@ public class BirdSpecies {
 
         if (birdsPerCellMax < 0) birdsPerCellMax = 0;
 
-        // If both pattern weights are <= 0, fallback to glide
+        // pattern weights (legacy)
         if (patternWeightGlide <= 0 && patternWeightCircle <= 0) {
             patternWeightGlide = 1.0;
             patternWeightCircle = 0.0;
@@ -188,6 +208,47 @@ public class BirdSpecies {
         if (scale <= 0) scale = 0.45;
         if (flapSpeed <= 0) flapSpeed = 0.35;
         if (flapAmplitude < 0) flapAmplitude = 0.0;
+
+        if (silhouette == null) silhouette = new SilhouetteSettings();
+        silhouette.clamp();
+
+        // --- NEW blocks: ensure non-null + clamp ---
+        if (spawning == null) spawning = new SpawningSettings();
+        spawning.clamp();
+
+        if (weather == null) weather = new WeatherSettings();
+        weather.clamp();
+
+        if (flocking == null) flocking = new FlockingSettings();
+        flocking.clamp();
+
+        if (movement == null) movement = new MovementSettings();
+        movement.clamp();
+
+        if (variation == null) variation = new VariationSettings();
+        variation.clamp();
+
+        if (soundSpam == null) soundSpam = new SoundSpamSettings();
+        soundSpam.clamp();
+
+        // day/night override blocks must exist
+        if (day == null) day = new OverrideBlock();
+        if (night == null) night = new OverrideBlock();
+
+        // clamp day/night multipliers if present
+        if (day.spawnMul != null) day.spawnMul = clampD(day.spawnMul, 0.0, 8.0, 1.0);
+        if (night.spawnMul != null) night.spawnMul = clampD(night.spawnMul, 0.0, 8.0, 1.0);
+
+        if (day.soundMul != null) day.soundMul = clampD(day.soundMul, 0.0, 8.0, 1.0);
+        if (night.soundMul != null) night.soundMul = clampD(night.soundMul, 0.0, 8.0, 1.0);
+    }
+
+    // small shared helper for new classes
+    private static double clampD(double v, double lo, double hi, double def) {
+        if (Double.isNaN(v) || Double.isInfinite(v)) return def;
+        if (v < lo) return lo;
+        if (v > hi) return hi;
+        return v;
     }
 
     /**
@@ -204,9 +265,78 @@ public class BirdSpecies {
         return new BirdSpeciesView(this, o);
     }
 
+    public static class SilhouetteSettings {
+        public int alphaThreshold = 12;   // 0..255
+        public int smoothRadius = 1;    // 0..3
+        public float densityPow = 1.8f; // higher => wings thinner
+        public float bellPow = 1.2f; // higher => more taper head/tail
+        public float thickGain = 0.48f;// overall thickness multiplier
+        public float coreWidthFact = 0.4f; // 0..1
+        public float coreThickFact = 0.80f;// 0..1
+
+        /**
+         * Optional: allow per-species ring count too.
+         */
+        public int ringCount = 7;           // low poly rings (>=3)
+
+        public void clamp() {
+            alphaThreshold = clampInt(alphaThreshold, 0, 250);
+            smoothRadius = clampInt(smoothRadius, 0, 6);
+            ringCount = clampInt(ringCount, 3, 64);
+
+            densityPow = clampF(densityPow, 0.01f, 8.0f);
+            bellPow = clampF(bellPow, 0.01f, 8.0f);
+
+            thickGain = clampF(thickGain, 0.0f, 4.0f);
+            coreWidthFact = clampF(coreWidthFact, 0.0f, 1.0f);
+            coreThickFact = clampF(coreThickFact, 0.0f, 1.0f);
+        }
+
+        private static int clampInt(int v, int lo, int hi) {
+            return (v < lo) ? lo : (v > hi) ? hi : v;
+        }
+
+        private static float clampF(float v, float lo, float hi) {
+            return (v < lo) ? lo : (v > hi) ? hi : v;
+        }
+
+        /**
+         * Used for caching: “same values = same key”
+         */
+        public int stableHash() {
+            int h = 1;
+            h = 31 * h + alphaThreshold;
+            h = 31 * h + smoothRadius;
+            h = 31 * h + ringCount;
+            h = 31 * h + Float.floatToIntBits(densityPow);
+            h = 31 * h + Float.floatToIntBits(bellPow);
+            h = 31 * h + Float.floatToIntBits(thickGain);
+            h = 31 * h + Float.floatToIntBits(coreWidthFact);
+            h = 31 * h + Float.floatToIntBits(coreThickFact);
+            return h;
+        }
+
+        public SilhouetteSettings copy() {
+            SilhouetteSettings s = new SilhouetteSettings();
+            s.alphaThreshold = this.alphaThreshold;
+            s.smoothRadius = this.smoothRadius;
+            s.ringCount = this.ringCount;
+            s.densityPow = this.densityPow;
+            s.bellPow = this.bellPow;
+            s.thickGain = this.thickGain;
+            s.coreWidthFact = this.coreWidthFact;
+            s.coreThickFact = this.coreThickFact;
+            return s;
+        }
+    }
 
     public static class OverrideBlock {
         // If a value is null, it means "no override"
+
+        // NEW multipliers (day/night)
+        public Double spawnMul;
+        public Double soundMul;
+
 
         public SoundOverride soundSingle;
         public SoundOverride soundFlock;
@@ -291,7 +421,9 @@ public class BirdSpecies {
                     && soundFadePower == null &&
                     flapSpeed == null &&
                     soundSingleEmpty &&
-                    soundFlockEmpty;
+                    soundFlockEmpty
+                    && spawnMul == null
+                    && soundMul == null;
         }
 
     }
@@ -303,6 +435,14 @@ public class BirdSpecies {
         public BirdSpeciesView(BirdSpecies base, OverrideBlock o) {
             this.base = base;
             this.o = (o != null) ? o : new OverrideBlock();
+        }
+
+        public double spawnMul() {
+            return (o.spawnMul != null) ? o.spawnMul : 1.0;
+        }
+
+        public double soundMul() {
+            return (o.soundMul != null) ? o.soundMul : 1.0;
         }
 
         // Sound
@@ -609,6 +749,199 @@ public class BirdSpecies {
 
         public double soundPitchVariation() {
             return (o.soundPitchVariation != null) ? o.soundPitchVariation : base.soundPitchVariation;
+        }
+    }
+
+    public static class SpawningSettings {
+        // 0 = unlimited (uses global cap only)
+        public int maxAroundPlayer = 0;
+
+        // 0 = no cooldown
+        public int cooldownAfterSpawnTicks = 0;
+
+        // If both are 0 -> legacy spawn ring (renderDistance+buffer .. +64)
+        public double minSpawnDistanceFromPlayer = 0.0;
+        public double maxSpawnDistanceFromPlayer = 0.0;
+
+        // Constraints
+        public boolean requiresSkyVisible = false;
+        public int minY = 0;
+        public int maxY = 256;
+
+        public void clamp() {
+            if (maxAroundPlayer < 0) maxAroundPlayer = 0;
+            if (maxAroundPlayer > 4096) maxAroundPlayer = 4096;
+
+            if (cooldownAfterSpawnTicks < 0) cooldownAfterSpawnTicks = 0;
+            if (cooldownAfterSpawnTicks > 20 * 60 * 60) cooldownAfterSpawnTicks = 20 * 60 * 60;
+
+            if (Double.isNaN(minSpawnDistanceFromPlayer) || minSpawnDistanceFromPlayer < 0)
+                minSpawnDistanceFromPlayer = 0.0;
+            if (Double.isNaN(maxSpawnDistanceFromPlayer) || maxSpawnDistanceFromPlayer < 0)
+                maxSpawnDistanceFromPlayer = 0.0;
+
+            if (minSpawnDistanceFromPlayer > 8192.0) minSpawnDistanceFromPlayer = 8192.0;
+            if (maxSpawnDistanceFromPlayer > 8192.0) maxSpawnDistanceFromPlayer = 8192.0;
+
+            if (minY < 0) minY = 0;
+            if (minY > 255) minY = 255;
+            if (maxY < 0) maxY = 0;
+            if (maxY > 255) maxY = 255;
+            if (maxY < minY) maxY = minY;
+        }
+    }
+
+    public static class WeatherSettings {
+        public double rainSpawnMul = 0.55;
+        public double stormSpawnMul = 0.15;
+
+        public double rainSoundMul = 0.75;
+        public double stormSoundMul = 0.25;
+
+        public void clamp() {
+            rainSpawnMul = clampD(rainSpawnMul, 0.0, 8.0, 0.55);
+            stormSpawnMul = clampD(stormSpawnMul, 0.0, 8.0, 0.15);
+            rainSoundMul = clampD(rainSoundMul, 0.0, 8.0, 0.75);
+            stormSoundMul = clampD(stormSoundMul, 0.0, 8.0, 0.25);
+        }
+    }
+
+    public static class FlockingSettings {
+        public double neighborRadius = 48.0;
+        public double separationRadius = 6.0;
+
+        public double cohesionWeight = 1.35;
+        public double alignmentWeight = 1.05;
+        public double separationWeight = 0.65;
+
+        public double maxForce = 0.10;
+
+        public void clamp() {
+            neighborRadius = clampD(neighborRadius, 8.0, 256.0, 48.0);
+            separationRadius = clampD(separationRadius, 0.5, 128.0, 6.0);
+            if (separationRadius > neighborRadius) separationRadius = neighborRadius;
+
+            cohesionWeight = clampD(cohesionWeight, 0.0, 10.0, 1.35);
+            alignmentWeight = clampD(alignmentWeight, 0.0, 10.0, 1.05);
+            separationWeight = clampD(separationWeight, 0.0, 10.0, 0.65);
+
+            maxForce = clampD(maxForce, 0.0, 2.0, 0.10);
+        }
+    }
+
+    public static class MovementSettings {
+        // If glide/circle weights are null -> use legacy patternWeightGlide/patternWeightCircle
+        public Double glideWeight = null;
+        public Double circleWeight = null;
+
+        // New modes (default 0 = off)
+        public Double soarWeight = 0.0;
+        public Double swoopWeight = 0.0;
+
+        public SoarSettings soar = new SoarSettings();
+        public SwoopSettings swoop = new SwoopSettings();
+
+        public void clamp() {
+            if (glideWeight != null) glideWeight = clampD(glideWeight, 0.0, 10.0, 0.55);
+            if (circleWeight != null) circleWeight = clampD(circleWeight, 0.0, 10.0, 0.45);
+
+            if (soarWeight == null) soarWeight = 0.0;
+            if (swoopWeight == null) swoopWeight = 0.0;
+
+            soarWeight = clampD(soarWeight, 0.0, 10.0, 0.0);
+            swoopWeight = clampD(swoopWeight, 0.0, 10.0, 0.0);
+
+            if (soar == null) soar = new SoarSettings();
+            if (swoop == null) swoop = new SwoopSettings();
+
+            soar.clamp();
+            swoop.clamp();
+        }
+
+        public static class SoarSettings {
+            public int minTicks = 100;
+            public int maxTicks = 260;
+
+            public double radiusMin = 22.0;
+            public double radiusMax = 80.0;
+
+            // extra upward intent added to vy
+            public double climbRate = 0.025;
+
+            // speed multiplier while soaring
+            public double speedMul = 0.85;
+
+            public void clamp() {
+                if (minTicks < 10) minTicks = 10;
+                if (maxTicks < minTicks) maxTicks = minTicks;
+                if (maxTicks > 20 * 600) maxTicks = 20 * 600;
+
+                radiusMin = clampD(radiusMin, 4.0, 256.0, 22.0);
+                radiusMax = clampD(radiusMax, radiusMin, 512.0, 80.0);
+
+                climbRate = clampD(climbRate, 0.0, 0.20, 0.025);
+                speedMul = clampD(speedMul, 0.2, 2.5, 0.85);
+            }
+        }
+
+        public static class SwoopSettings {
+            public int minTicks = 50;
+            public int maxTicks = 120;
+
+            // forced vy intents during phases
+            public double diveRate = 0.07;
+            public double pullUpRate = 0.09;
+
+            // speed multiplier while swooping
+            public double diveSpeedMul = 1.25;
+
+            // don’t dive below this above-ground buffer (soft; terrain clamp still applies)
+            public double minAboveGround = 10.0;
+
+            public void clamp() {
+                if (minTicks < 10) minTicks = 10;
+                if (maxTicks < minTicks) maxTicks = minTicks;
+                if (maxTicks > 20 * 600) maxTicks = 20 * 600;
+
+                diveRate = clampD(diveRate, 0.0, 0.30, 0.07);
+                pullUpRate = clampD(pullUpRate, 0.0, 0.30, 0.09);
+
+                diveSpeedMul = clampD(diveSpeedMul, 0.2, 3.0, 1.25);
+                minAboveGround = clampD(minAboveGround, 0.0, 256.0, 10.0);
+            }
+        }
+    }
+
+    public static class VariationSettings {
+        // Each is a FRACTION: 0.05 => ±5%
+        public double scaleJitter = 0.05;
+        public double speedJitter = 0.07;
+        public double flapAmpJitter = 0.20;
+        public double flapSpeedJitter = 0.15;
+        public double callPitchJitter = 0.04;
+
+        public void clamp() {
+            scaleJitter = clampD(scaleJitter, 0.0, 0.90, 0.05);
+            speedJitter = clampD(speedJitter, 0.0, 0.90, 0.07);
+            flapAmpJitter = clampD(flapAmpJitter, 0.0, 0.90, 0.20);
+            flapSpeedJitter = clampD(flapSpeedJitter, 0.0, 0.90, 0.15);
+            callPitchJitter = clampD(callPitchJitter, 0.0, 0.90, 0.04);
+        }
+    }
+
+    public static class SoundSpamSettings {
+        public int maxCallsPerRadius = 2;
+        public double callRadiusBlocks = 48.0;
+        public int callCooldownTicks = 80;
+
+        public void clamp() {
+            if (maxCallsPerRadius < 0) maxCallsPerRadius = 0;
+            if (maxCallsPerRadius > 64) maxCallsPerRadius = 64;
+
+            callRadiusBlocks = clampD(callRadiusBlocks, 0.0, 256.0, 48.0);
+
+            if (callCooldownTicks < 0) callCooldownTicks = 0;
+            if (callCooldownTicks > 20 * 60) callCooldownTicks = 20 * 60;
         }
     }
 

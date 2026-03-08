@@ -4,15 +4,21 @@ package com.jubitus.birds.client.config;
  * Runtime cache used by your spawn manager.
  * Values are copied from Forge @Config-backed JubitusBirdsConfig so GUI changes apply in-game.
  * <p>
- * NOTE: All bird/default_species behavior is now configured per-default_species via /config/jubitusbirds/<default_species>/properties.json
+ * NOTE: All bird/species behavior is now configured per-species via /config/jubitusbirds/<species>/properties.json
  */
 
 public class BirdConfig {
+
+    public static JubitusBirdsConfig.Render.Mode renderMode = JubitusBirdsConfig.Render.Mode.LOFTED_3D;
+    public static double loftBaseThickness = 0.22;
+    public static double loftCapOffset = 0.06;
+
 
     public static boolean underwaterMuffleEnabled = true;
     public static double underwaterGain = 0.06;
     public static double underwaterSmooth = 0.15;
     public static double underwaterPitchMul = 0.92;
+    public static int softTargetBirdsAroundPlayer = 48;
 
 
     public static int occlusionCheckIntervalTicks = 5;
@@ -83,6 +89,9 @@ public class BirdConfig {
         underwaterSmooth = JubitusBirdsConfig.SOUND.underwaterSmooth;
         underwaterPitchMul = JubitusBirdsConfig.SOUND.underwaterPitchMul;
 
+        softTargetBirdsAroundPlayer = JubitusBirdsConfig.BORDERS.softTargetBirdsAroundPlayer;
+
+
         // Safety clamps
         if (spawnCellSize < 16) spawnCellSize = 16;
         if (spawnTimeWindowTicks < 1) spawnTimeWindowTicks = 1;
@@ -132,6 +141,16 @@ public class BirdConfig {
 
         if (underwaterPitchMul < 0.5) underwaterPitchMul = 0.5;
         if (underwaterPitchMul > 1.2) underwaterPitchMul = 1.2;
+        renderMode = JubitusBirdsConfig.RENDER.mode;
+        loftBaseThickness = JubitusBirdsConfig.RENDER.loftBaseThickness;
+        loftCapOffset = JubitusBirdsConfig.RENDER.loftCapOffset;
+
+// clamps (optional safety)
+        if (loftBaseThickness < 0.05) loftBaseThickness = 0.05;
+        if (loftBaseThickness > 0.80) loftBaseThickness = 0.80;
+        if (loftCapOffset < 0.0) loftCapOffset = 0.0;
+        if (loftCapOffset > 0.30) loftCapOffset = 0.30;
+
 
     }
 

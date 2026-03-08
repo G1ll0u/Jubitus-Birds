@@ -20,7 +20,7 @@ public class BirdSoundSystem {
 
     private static final int DEFAULT_ATTENUATION_DISTANCE = 128;
     /**
-     * One default_species -> two pools (single + flock)
+     * One species -> two pools (single + flock)
      */
     private static final Map<String, SpeciesPools> SPECIES_SOUNDS = new LinkedHashMap<>();
     /**
@@ -119,7 +119,7 @@ public class BirdSoundSystem {
     }
 
     /**
-     * Called by BirdSpeciesLoader while loading default_species.
+     * Called by BirdSpeciesLoader while loading species.
      */
     public static void setSpeciesSounds(String soundKey, BirdCallType type, List<String> soundNamesNoExt) {
         String key = safe(soundKey);
@@ -181,7 +181,7 @@ public class BirdSoundSystem {
     }
 
     private static void appendEvent(StringBuilder sb, String speciesKey, BirdCallType type, List<String> sounds) {
-        String eventKey = "default_species." + speciesKey + "." + type.eventSuffix;
+        String eventKey = "species." + speciesKey + "." + type.eventSuffix;
 
         int attenuation = getAttenuationDistance(speciesKey, type);
 
@@ -195,7 +195,7 @@ public class BirdSoundSystem {
             sb.append("      {\n");
             sb.append("        \"name\": \"")
                     .append(Tags.MOD_ID)
-                    .append(":default_species/")
+                    .append(":species/")
                     .append(speciesKey)
                     .append("/")
                     .append(type.soundsSubdir)
@@ -223,7 +223,7 @@ public class BirdSoundSystem {
     }
 
     /**
-     * Do we have any sounds for this default_species + type?
+     * Do we have any sounds for this species + type?
      */
     public static boolean hasSounds(String soundKey, BirdCallType type) {
         SpeciesPools pools = SPECIES_SOUNDS.get(safe(soundKey));
@@ -234,10 +234,10 @@ public class BirdSoundSystem {
     }
 
     /**
-     * ResourceLocation for the call event for a default_species + type.
+     * ResourceLocation for the call event for a species + type.
      */
     public static ResourceLocation getCallEvent(String soundKey, BirdCallType type) {
-        return new ResourceLocation(Tags.MOD_ID, "default_species." + safe(soundKey) + "." + type.eventSuffix);
+        return new ResourceLocation(Tags.MOD_ID, "species." + safe(soundKey) + "." + type.eventSuffix);
     }
 
     /**

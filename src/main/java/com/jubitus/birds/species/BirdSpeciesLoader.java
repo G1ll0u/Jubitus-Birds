@@ -6,6 +6,7 @@ import com.google.gson.JsonSyntaxException;
 import com.jubitus.birds.JubitusBirds;
 import com.jubitus.birds.client.sound.BirdCallType;
 import com.jubitus.birds.client.sound.BirdSoundSystem;
+import com.jubitus.birds.render.BirdSilhouetteCache;
 import com.jubitus.jubitusbirds.Tags;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;
@@ -30,6 +31,8 @@ public class BirdSpeciesLoader {
 
     public static void loadAllSpecies() {
         BirdSpeciesRegistry.clear();
+        com.jubitus.birds.render.BirdSilhouetteCache.clear();
+
         BirdSoundSystem.clearAllSpeciesSounds(); // IMPORTANT: avoid stale keys after reload
 
 
@@ -73,7 +76,7 @@ public class BirdSpeciesLoader {
                     continue;
                 }
 
-                // NEW per-default_species sound folders:
+                // NEW per-species sound folders:
                 Path singleDir = speciesDir.resolve("sounds_single");
                 Path flockDir = speciesDir.resolve("sounds_flock");
 
@@ -110,14 +113,14 @@ public class BirdSpeciesLoader {
                 JubitusBirds.LOGGER.info("[JubitusBirds] Species '{}' soundKey='{}' singleSounds={} flockSounds={}",
                         s.name, s.soundKey, singleSounds.size(), flockSounds.size());
 
-                JubitusBirds.LOGGER.info("[JubitusBirds] Loaded default_species '{}' with {} texture(s).", s.name, s.textures.size());
+                JubitusBirds.LOGGER.info("[JubitusBirds] Loaded species '{}' with {} texture(s).", s.name, s.textures.size());
             }
         } catch (IOException e) {
-            JubitusBirds.LOGGER.error("[JubitusBirds] Failed scanning default_species folder.", e);
+            JubitusBirds.LOGGER.error("[JubitusBirds] Failed scanning species folder.", e);
         }
 
         if (BirdSpeciesRegistry.all().isEmpty()) {
-            JubitusBirds.LOGGER.error("[JubitusBirds] No default_species loaded! Birds will not spawn.");
+            JubitusBirds.LOGGER.error("[JubitusBirds] No species loaded! Birds will not spawn.");
         }
     }
 
@@ -127,7 +130,7 @@ public class BirdSpeciesLoader {
     public static Path getRootConfigDir() {
         // 1.12.2: config folder is relative to game dir
         File gameDir = Minecraft.getMinecraft().gameDir;
-        return gameDir.toPath().resolve("config").resolve("jubitusbirds/default_species");
+        return gameDir.toPath().resolve("config").resolve("jubitusbirds/species");
     }
 
     private static BirdSpecies readSpeciesJson(String folderName, Path props) {
@@ -197,7 +200,7 @@ public class BirdSpeciesLoader {
                         size = Files.size(p);
                     } catch (IOException ignored) {
                     }
-                    JubitusBirds.LOGGER.error("[JubitusBirds] Skipping {} sound for default_species='{}' file={} (codec={}, {} bytes). Minecraft 1.12 needs VORBIS.",
+                    JubitusBirds.LOGGER.error("[JubitusBirds] Skipping {} sound for species='{}' file={} (codec={}, {} bytes). Minecraft 1.12 needs VORBIS.",
                             poolName, speciesKey, p.toAbsolutePath(), codec, size);
                     return;
                 }
@@ -232,10 +235,12 @@ public class BirdSpeciesLoader {
             String safeFile = pngPath.getFileName().toString().toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_\\-\\.]", "_");
 
             ResourceLocation rl = new ResourceLocation(Tags.MOD_ID, "jubitusbirds/" + safeSpecies + "/" + safeFile);
+// Build silhouette profile + avg color once, using the BufferedImage we already have
+            BirdSpecies.SilhouetteSettings sil = (s.silhouette != null) ? s.silhouette : new BirdSpecies.SilhouetteSettings();
+            BirdSilhouetteCache.putBuilt(rl, sil, img);
 
             // This must run when the texture manager exists (we moved loadAllSpecies() to init)
             Minecraft.getMinecraft().getTextureManager().loadTexture(rl, dyn);
-
             return rl;
 
         } catch (Exception e) {

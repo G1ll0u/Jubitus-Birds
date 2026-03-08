@@ -5,20 +5,98 @@ import com.jubitus.jubitusbirds.Tags;
 import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
 public final class DefaultSpeciesExtractor {
     // Where defaults live INSIDE the JAR
-    private static final String JAR_PREFIX = "assets/" + Tags.MOD_ID + "/default_species/";
+    private static final String JAR_PREFIX = "assets/" + Tags.MOD_ID + "/species/";
 
     private DefaultSpeciesExtractor() {
+    }
+
+    /**
+     * If /config/jubitus/default_species exists:
+     * - zip it to /config/jubitus/backup_old_species.zip
+     * - delete the folder
+     */
+    public static void backupAndDeleteOldDefaultSpecies(FMLPreInitializationEvent event) {
+        Path configDir = event.getModConfigurationDirectory().toPath(); // /config
+        Path oldDir = configDir.resolve("jubitusbirds").resolve("default_species");
+        if (!Files.isDirectory(oldDir)) return;
+
+        Path zipOut = configDir.resolve("jubitusbirds").resolve("backup_old_species.zip");
+
+        try {
+            Files.createDirectories(zipOut.getParent());
+
+            // Overwrite if it exists
+            if (Files.exists(zipOut)) {
+                Files.delete(zipOut);
+            }
+
+            zipDirectory(oldDir, zipOut);
+            deleteDirectoryRecursive(oldDir);
+
+            JubitusBirds.LOGGER.info("[JubitusBirds] Backed up old default species to {} and deleted {}",
+                    zipOut.toAbsolutePath(), oldDir.toAbsolutePath());
+
+        } catch (Exception e) {
+            JubitusBirds.LOGGER.warn("[JubitusBirds] Failed to backup+delete old default species folder: {}",
+                    oldDir.toAbsolutePath(), e);
+        }
+    }
+
+    private static void zipDirectory(Path sourceDir, Path zipFile) throws IOException {
+        try (java.io.OutputStream fos = Files.newOutputStream(zipFile);
+             java.io.BufferedOutputStream bos = new java.io.BufferedOutputStream(fos);
+             java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(bos)) {
+
+            // Ensure consistent relative paths inside the zip
+            final Path base = sourceDir;
+
+            Files.walk(sourceDir).forEach(p -> {
+                try {
+                    if (Files.isDirectory(p)) return;
+
+                    Path rel = base.relativize(p);
+                    String entryName = rel.toString().replace('\\', '/'); // zip standard
+
+                    java.util.zip.ZipEntry entry = new java.util.zip.ZipEntry(entryName);
+                    entry.setTime(Files.getLastModifiedTime(p).toMillis());
+                    zos.putNextEntry(entry);
+
+                    Files.copy(p, zos);
+                    zos.closeEntry();
+
+                } catch (IOException ioe) {
+                    throw new RuntimeException(ioe);
+                }
+            });
+        } catch (RuntimeException re) {
+            if (re.getCause() instanceof IOException) throw (IOException) re.getCause();
+            throw re;
+        }
+    }
+
+    private static void deleteDirectoryRecursive(Path dir) throws IOException {
+        // Delete files first, then directories
+        Files.walk(dir)
+                .sorted(java.util.Comparator.reverseOrder())
+                .forEach(p -> {
+                    try {
+                        Files.deleteIfExists(p);
+                    } catch (IOException ioe) {
+                        throw new RuntimeException(ioe);
+                    }
+                });
     }
 
     public static void extractMissingDefaults(FMLPreInitializationEvent event) {
         try {
             File cfgDir = event.getModConfigurationDirectory(); // .../.minecraft/config
-            Path targetRoot = cfgDir.toPath().resolve("jubitusbirds").resolve("default_species");
+            Path targetRoot = cfgDir.toPath().resolve("jubitusbirds").resolve("species");
             Files.createDirectories(targetRoot);
 
             File source = event.getSourceFile(); // jar in production, folder in dev
@@ -31,14 +109,14 @@ public final class DefaultSpeciesExtractor {
                 JubitusBirds.LOGGER.warn("[JubitusBirds] Unknown source type: {}", source);
             }
         } catch (Exception e) {
-            JubitusBirds.LOGGER.warn("[JubitusBirds] Failed extracting default default_species.", e);
+            JubitusBirds.LOGGER.warn("[JubitusBirds] Failed extracting default species.", e);
         }
     }
 
     private static void extractFromJar(File jarFile, Path targetRoot) throws Exception {
         try (java.util.jar.JarFile jar = new java.util.jar.JarFile(jarFile)) {
 
-            // Discover default_species folder names contained in defaults
+            // Discover species folder names contained in defaults
             java.util.Set<String> bundledSpecies = new java.util.HashSet<>();
 
             java.util.Enumeration<java.util.jar.JarEntry> en = jar.entries();
@@ -46,7 +124,7 @@ public final class DefaultSpeciesExtractor {
                 java.util.jar.JarEntry je = en.nextElement();
                 if (je.isDirectory()) continue;
 
-                String name = je.getName(); // e.g. assets/jubitusbirds/default_species/robin/properties.json
+                String name = je.getName(); // e.g. assets/jubitusbirds/species/robin/properties.json
                 if (!name.startsWith(JAR_PREFIX)) continue;
 
                 String rest = name.substring(JAR_PREFIX.length());
@@ -57,17 +135,17 @@ public final class DefaultSpeciesExtractor {
                 bundledSpecies.add(speciesFolder);
             }
 
-            // Copy each default_species if the folder doesn't exist yet
+            // Copy each species if the folder doesn't exist yet
             for (String speciesFolder : bundledSpecies) {
                 Path outDir = targetRoot.resolve(speciesFolder);
                 if (Files.isDirectory(outDir)) {
-                    JubitusBirds.LOGGER.info("[JubitusBirds] Default default_species '{}' already exists, skipping.", speciesFolder);
+                    JubitusBirds.LOGGER.info("[JubitusBirds] Default species '{}' already exists, skipping.", speciesFolder);
                     continue;
                 }
 
                 Files.createDirectories(outDir);
 
-                // Copy all files under that default_species folder
+                // Copy all files under that species folder
                 java.util.Enumeration<java.util.jar.JarEntry> en2 = jar.entries();
                 while (en2.hasMoreElements()) {
                     java.util.jar.JarEntry je = en2.nextElement();
@@ -87,7 +165,7 @@ public final class DefaultSpeciesExtractor {
                     }
                 }
 
-                JubitusBirds.LOGGER.info("[JubitusBirds] Installed default default_species '{}'.", speciesFolder);
+                JubitusBirds.LOGGER.info("[JubitusBirds] Installed default species '{}'.", speciesFolder);
             }
         }
     }
@@ -95,9 +173,9 @@ public final class DefaultSpeciesExtractor {
     private static void extractFromDirectory(Path modRoot, Path targetRoot) throws Exception {
         // In dev, resources often end up in: <modRoot>/build/resources/main/...
         // event.getSourceFile() is usually the "classes" folder, so we search for the assets path.
-        Path assets = findAssetsRoot(modRoot).resolve(Tags.MOD_ID).resolve("default_species");
+        Path assets = findAssetsRoot(modRoot).resolve(Tags.MOD_ID).resolve("species");
         if (!Files.isDirectory(assets)) {
-            JubitusBirds.LOGGER.warn("[JubitusBirds] No default_species folder found in dev resources: {}", assets);
+            JubitusBirds.LOGGER.warn("[JubitusBirds] No species folder found in dev resources: {}", assets);
             return;
         }
 
@@ -107,7 +185,7 @@ public final class DefaultSpeciesExtractor {
                 Path outDir = targetRoot.resolve(speciesFolder);
 
                 if (Files.isDirectory(outDir)) {
-                    JubitusBirds.LOGGER.info("[JubitusBirds] Default default_species '{}' already exists, skipping.", speciesFolder);
+                    JubitusBirds.LOGGER.info("[JubitusBirds] Default species '{}' already exists, skipping.", speciesFolder);
                     return;
                 }
 
@@ -126,10 +204,10 @@ public final class DefaultSpeciesExtractor {
                         }
                     });
 
-                    JubitusBirds.LOGGER.info("[JubitusBirds] Installed default default_species '{}'.", speciesFolder);
+                    JubitusBirds.LOGGER.info("[JubitusBirds] Installed default species '{}'.", speciesFolder);
 
                 } catch (Exception e) {
-                    JubitusBirds.LOGGER.warn("[JubitusBirds] Failed installing default default_species '{}'.", speciesFolder, e);
+                    JubitusBirds.LOGGER.warn("[JubitusBirds] Failed installing default species '{}'.", speciesFolder, e);
                 }
             });
         }

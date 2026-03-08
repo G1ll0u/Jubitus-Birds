@@ -1,11 +1,11 @@
 package com.jubitus.birds.client;
 
 import com.jubitus.birds.client.config.BirdConfig;
-import com.jubitus.birds.client.config.JubitusBirdsConfig;
 import com.jubitus.birds.client.sound.BirdSoundSystem;
 import com.jubitus.birds.client.util.Flock;
 import com.jubitus.birds.client.util.FlockSpawner;
 import com.jubitus.birds.client.util.SpatialHash;
+import com.jubitus.birds.client.util.spawn.BirdSpawnController;
 import com.jubitus.birds.render.RenderBird;
 import net.minecraft.client.Minecraft;
 import net.minecraft.entity.player.EntityPlayer;
@@ -20,7 +20,7 @@ import java.util.*;
 public class BirdManager {
     public static BirdManager INSTANCE;
     private final Map<Long, ClientBird> birdsById = new HashMap<>();
-
+    private final BirdSpawnController spawnController = new BirdSpawnController();
     // Flocking support
     private final Map<Long, Flock> flocksById = new HashMap<>();
     private final SpatialHash spatial = new SpatialHash(24);
@@ -37,7 +37,9 @@ public class BirdManager {
         World world = mc.world;
         EntityPlayer player = mc.player;
         if (world == null || player == null) return;
+
         BirdSoundSystem.tickCleanup();
+
         // --- VIEW BORDER + DESPAWN ---
         int viewChunks = mc.gameSettings.renderDistanceChunks;
         double viewBorder = viewChunks * 16.0;
@@ -50,7 +52,7 @@ public class BirdManager {
             spatial.insert(b);
         }
 
-        // --- TICK FLOCKS (group decisions) ---
+        // --- TICK FLOCKS ---
         for (Flock f : flocksById.values()) {
             f.tick(world);
         }
@@ -68,9 +70,13 @@ public class BirdManager {
                 if (f != null) flockForward = f.getGroupForward();
             }
 
-            List<ClientBird> neighbors = spatial.queryNearby(b.pos);
+            // NEW: neighborRadius per species (still uses spatial hash)
+            double nr = 48.0;
+            if (b.species != null && b.species.flocking != null) {
+                nr = b.species.flocking.neighborRadius;
+            }
+            List<ClientBird> neighbors = spatial.queryRadius(b.pos, nr);
 
-            // ✅ CALL THE NEW TICK SIGNATURE
             b.tick(world, flockForward, neighbors);
 
             double d2 = b.pos.squareDistanceTo(cam);
@@ -78,21 +84,25 @@ public class BirdManager {
                 BirdSoundSystem.stopForBird(b.getId());
                 it.remove();
             }
-
         }
 
-        // --- OPTIONAL: CLEAN UP EMPTY FLOCKS (keeps map small) ---
         cleanupFlocks();
 
-        // --- SPAWN (ONLY IF UNDER CAP) ---
-        if (birdsById.size() >= BirdConfig.maxBirdsAroundPlayer) return;
-        long t = world.getWorldTime() % 24000L;
-// allow spawn from 0..13000 (daytime-ish)
-        if (t > 13000L) return;
+        // --- SPAWN DENSITY CONTROL ---
+        int hardCap = BirdConfig.maxBirdsAroundPlayer;
+        if (hardCap <= 0) return;
+        if (birdsById.size() >= hardCap) return;
+
+        long now = world.getTotalWorldTime();
+
+        // NEW: begin controller tick (global soft target + per-species cap state)
+        spawnController.beginTick(world, player, birdsById, now,
+                BirdConfig.softTargetBirdsAroundPlayer,
+                BirdConfig.maxBirdsAroundPlayer);
 
         long worldSeed = world.getSeed();
         int dim = world.provider.getDimension();
-        long window = world.getTotalWorldTime() / BirdConfig.spawnTimeWindowTicks;
+        long window = now / BirdConfig.spawnTimeWindowTicks;
 
         int cell = BirdConfig.spawnCellSize;
         int px = (int) Math.floor(player.posX);
@@ -100,25 +110,27 @@ public class BirdManager {
         int cellX = floorDiv(px, cell);
         int cellZ = floorDiv(pz, cell);
 
-        int radiusCells = JubitusBirdsConfig.SPAWNING.spawnRadiusCells;
+        int radiusCells = BirdConfig.spawnRadiusCells;
 
         FlockSpawner.SpawnResult sr = FlockSpawner.spawnForCells(
-                world, player, worldSeed, dim, window, cellX, cellZ, radiusCells
+                world, player, worldSeed, dim, window, cellX, cellZ, radiusCells,
+                spawnController
         );
 
-
-        // Keep / add flock objects
+        // Keep/add flock objects
         flocksById.putAll(sr.flocks);
 
         for (ClientBird b : sr.birds) {
             long id = b.getId();
             if (!birdsById.containsKey(id)) {
                 birdsById.put(id, b);
-                if (birdsById.size() >= BirdConfig.maxBirdsAroundPlayer) break;
+                if (birdsById.size() >= hardCap) break;
             }
         }
+
         BirdSoundSystem.tickCleanup();
     }
+
 
     private void cleanupFlocks() {
         // Remove flock entries if no birds reference them anymore
@@ -141,7 +153,9 @@ public class BirdManager {
     @SubscribeEvent
     public void onRenderWorldLast(RenderWorldLastEvent e) {
         Minecraft mc = Minecraft.getMinecraft();
-        if (mc.world == null || mc.player == null) return;
+        if (mc == null || mc.world == null || mc.player == null) return;
+
+        if (mc.currentScreen != null) return;
 
         RenderBird.renderAll(birdsById.values(), e.getPartialTicks());
     }

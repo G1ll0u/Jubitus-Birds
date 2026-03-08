@@ -24,7 +24,7 @@ public class ClientProxy extends CommonProxy {
 
     @Override
     public void init(FMLInitializationEvent e) {
-        // Load default_species (fills BirdSoundSystem pools + textures)
+        // Load species (fills BirdSoundSystem pools + textures)
         BirdSpeciesLoader.loadAllSpecies();
 
         // Instead of Minecraft.getMinecraft().refreshResources();

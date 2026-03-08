@@ -41,6 +41,26 @@ public class SpatialHash {
         return (((long) x) << 32) ^ (z & 0xFFFFFFFFL);
     }
 
+    public List<ClientBird> queryRadius(Vec3d pos, double radius) {
+        int cx = floorDiv((int) Math.floor(pos.x), cellSize);
+        int cz = floorDiv((int) Math.floor(pos.z), cellSize);
+
+        int rCells = (int) Math.ceil(Math.max(0.0, radius) / cellSize);
+        if (rCells <= 1) {
+            return queryNearby(pos); // keep the old fast path
+        }
+
+        List<ClientBird> out = new ArrayList<>();
+        for (int dx = -rCells; dx <= rCells; dx++) {
+            for (int dz = -rCells; dz <= rCells; dz++) {
+                long k = pack(cx + dx, cz + dz);
+                List<ClientBird> list = buckets.get(k);
+                if (list != null) out.addAll(list);
+            }
+        }
+        return out;
+    }
+
     public List<ClientBird> queryNearby(Vec3d pos) {
         int cx = floorDiv((int) Math.floor(pos.x), cellSize);
         int cz = floorDiv((int) Math.floor(pos.z), cellSize);
@@ -55,4 +75,5 @@ public class SpatialHash {
         }
         return out;
     }
+
 }

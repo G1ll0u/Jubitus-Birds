@@ -7,17 +7,17 @@ public enum BirdCallType {
     FLOCK("flock", "call_flock", "sounds_flock");
 
     /**
-     * Subfolder used inside the sounds path: sounds/default_species/<default_species>/<subdir>/<file>.ogg
+     * Subfolder used inside the sounds path: sounds/species/<species>/<subdir>/<file>.ogg
      */
     public final String soundsSubdir;
 
     /**
-     * Event suffix: default_species.<default_species>.<eventSuffix>
+     * Event suffix: species.<species>.<eventSuffix>
      */
     public final String eventSuffix;
 
     /**
-     * Config root folder: config/jubitusbirds/default_species/<configRoot>/<default_species>/<file>.ogg
+     * Config root folder: config/jubitusbirds/species/<configRoot>/<species>/<file>.ogg
      */
     public final String configRootFolder;
 

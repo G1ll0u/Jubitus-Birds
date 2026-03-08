@@ -36,6 +36,7 @@ public class JubitusBirds {
         LOGGER.info("Hello From {}!", Tags.MOD_NAME);
 
         deleteOldRootConfig(event);
+        DefaultSpeciesExtractor.backupAndDeleteOldDefaultSpecies(event);
         DefaultSpeciesExtractor.extractMissingDefaults(event);
         // global config cache (your current system)
         BirdConfig.reloadFromGuiConfig();

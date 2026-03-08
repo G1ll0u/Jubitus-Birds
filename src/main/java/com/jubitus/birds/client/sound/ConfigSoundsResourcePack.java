@@ -67,7 +67,7 @@ public class ConfigSoundsResourcePack implements IResourcePack {
         String p = location.getPath();
 
         // .ogg
-        if (p.startsWith("sounds/default_species/") && p.endsWith(".ogg")) {
+        if (p.startsWith("sounds/species/") && p.endsWith(".ogg")) {
             Path file = mapToConfigOgg(p);
 
             if (file == null) {
@@ -106,7 +106,7 @@ public class ConfigSoundsResourcePack implements IResourcePack {
         if ("sounds.json".equals(location.getPath())) return true;
 
         String p = location.getPath();
-        if (p.startsWith("sounds/default_species/") && p.endsWith(".ogg")) {
+        if (p.startsWith("sounds/species/") && p.endsWith(".ogg")) {
             Path file = mapToConfigOgg(p);
             return file != null && Files.exists(file);
         }
@@ -139,11 +139,11 @@ public class ConfigSoundsResourcePack implements IResourcePack {
 
     private Path mapToConfigOgg(String resourcePath) {
         // Resource paths we serve:
-        // - NEW single: "sounds/default_species/<default_species>/single/<name>.ogg"
-        // - NEW flock : "sounds/default_species/<default_species>/flock/<name>.ogg"
-        // - Legacy    : "sounds/default_species/<default_species>/<name>.ogg" (optional fallback)
+        // - NEW single: "sounds/species/<species>/single/<name>.ogg"
+        // - NEW flock : "sounds/species/<species>/flock/<name>.ogg"
+        // - Legacy    : "sounds/species/<species>/<name>.ogg" (optional fallback)
 
-        String rest = resourcePath.substring("sounds/default_species/".length()); // "<default_species>/..."
+        String rest = resourcePath.substring("sounds/species/".length()); // "<species>/..."
         String[] parts = rest.split("/");
 
         if (parts.length < 2) return null;
@@ -153,11 +153,11 @@ public class ConfigSoundsResourcePack implements IResourcePack {
         String fileName;
 
         if (parts.length >= 3) {
-            // new layout: <default_species>/<type>/<file.ogg>
+            // new layout: <species>/<type>/<file.ogg>
             typePart = parts[1];
             fileName = parts[2];
         } else {
-            // legacy: <default_species>/<file.ogg>
+            // legacy: <species>/<file.ogg>
             fileName = parts[1];
         }
 
@@ -166,7 +166,7 @@ public class ConfigSoundsResourcePack implements IResourcePack {
         Path speciesBase = gameDir.toPath()
                 .resolve("config")
                 .resolve("jubitusbirds")
-                .resolve("default_species")
+                .resolve("species")
                 .resolve(speciesKey);
 
         if ("single".equals(typePart)) {
@@ -176,7 +176,7 @@ public class ConfigSoundsResourcePack implements IResourcePack {
             return speciesBase.resolve("sounds_flock").resolve(fileName);
         }
 
-        // Legacy fallback: /config/jubitusbirds/default_species/<default_species>/sounds/<file>.ogg
+        // Legacy fallback: /config/jubitusbirds/species/<species>/sounds/<file>.ogg
         return speciesBase.resolve("sounds").resolve(fileName);
     }
 
