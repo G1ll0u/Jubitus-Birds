@@ -3,8 +3,10 @@ package com.jubitus.birds.client.gui;
 import com.google.gson.*;
 import com.jubitus.birds.client.BirdManager;
 import com.jubitus.birds.client.sound.BirdSoundSystem;
+import com.jubitus.birds.render.BirdSilhouetteCache;
 import com.jubitus.birds.species.BirdSpecies;
 import com.jubitus.birds.species.BirdSpeciesLoader;
+import com.jubitus.birds.species.BirdSpeciesRegistry;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.*;
 import net.minecraft.client.renderer.BufferBuilder;
@@ -25,6 +27,16 @@ import java.util.*;
 
 public class GuiSpeciesEditorScreen extends GuiScreen {
 
+    // Keep last silhouette settings that successfully built a preview
+    private BirdSpecies.SilhouetteSettings lastGoodPreviewSil = new BirdSpecies.SilhouetteSettings();
+
+
+    private boolean previewDirty = false;
+    private long previewRebuildAtMs = 0L;
+
+    // optional: keep last good json snapshot so preview never “dies”
+    private JsonObject lastGoodPreviewJson = null;
+
     // ---------------------------------------------------
 // Tooltips (hover descriptions for entries)
 // ---------------------------------------------------
@@ -39,7 +51,9 @@ public class GuiSpeciesEditorScreen extends GuiScreen {
     private static final int PREVIEW_H = 200; // right panel height
     private static final int PREVIEW_TEX_SIZE = 120;
     private final GuiScreen parent;
-    private final BirdSpecies species;
+    private BirdSpecies species;
+    private final String speciesFolder;
+
     private final List<JsonEntry> entries = new ArrayList<>();
     // re-layout guard
     private int lastW = -1, lastH = -1;
@@ -49,11 +63,16 @@ public class GuiSpeciesEditorScreen extends GuiScreen {
     private GuiButton btnCancel;
     private GuiButton btnReloadFromDisk;
     private int previewX, previewY, previewW, previewH;
+    private int lastPreviewSilHash = Integer.MIN_VALUE;
+    private BirdSpecies.SilhouetteSettings previewSil = new BirdSpecies.SilhouetteSettings();
+
 
     public GuiSpeciesEditorScreen(GuiScreen parent, BirdSpecies species) {
         this.parent = parent;
         this.species = species;
+        this.speciesFolder = (species != null) ? species.folderName : "unknown";
     }
+
 
     private static void putTip(String key, String... lines) {
         ENTRY_TOOLTIPS.put(key, lines);
@@ -63,18 +82,18 @@ public class GuiSpeciesEditorScreen extends GuiScreen {
         if (!ENTRY_TOOLTIPS.isEmpty()) return;
 
         putTip("name",
-                "Display name of the default_species.",
-                "Shown in the default_species list and editor title.");
+                "Display name of the species.",
+                "Shown in the species list and editor title.");
 
         putTip("enabled",
-                "If false, this default_species will NOT spawn.");
+                "If false, this species will NOT spawn.");
 
         putTip("spawnWeight",
-                "Relative chance of being picked when multiple default_species are allowed.",
+                "Relative chance of being picked when multiple species are allowed.",
                 "Higher = more common, lower = rarer.");
 
         putTip("birdsPerCellMax",
-                "Max number of single birds this default_species can spawn per cell.",
+                "Max number of single birds this species can spawn per cell.",
                 "Higher = more birds overall.");
 
         putTip("flockChancePerCell",
@@ -106,9 +125,9 @@ public class GuiSpeciesEditorScreen extends GuiScreen {
                 "Blacklist wins over whitelist.");
 
         putTip("canSpawnAtDay",
-                "If false, this default_species will not spawn during the day.");
+                "If false, this species will not spawn during the day.");
         putTip("canSpawnAtNight",
-                "If true, this default_species can spawn during the night.");
+                "If true, this species can spawn during the night.");
 
         putTip("minSpeed",
                 "Minimum flight speed (blocks/tick).");
@@ -164,6 +183,15 @@ public class GuiSpeciesEditorScreen extends GuiScreen {
                 "0 = no flap.");
         putTip("flapSpeed",
                 "How fast the wing wobble animates.");
+        putTip("silhouette.alphaThreshold", "Alpha >= this counts as “solid” for silhouette.");
+        putTip("silhouette.smoothRadius", "Row smoothing radius. Higher = smoother outline, less detail.");
+        putTip("silhouette.densityPow", "Higher = wings get thinner (density affects thickness).");
+        putTip("silhouette.bellPow", "Higher = thicker mid-body, more taper head/tail.");
+        putTip("silhouette.thickGain", "Global thickness multiplier from silhouette.");
+        putTip("silhouette.coreWidthFact", "How narrow the inner core is vs outer (0..1).");
+        putTip("silhouette.coreThickFact", "Core thickness multiplier (0..1).");
+        putTip("silhouette.ringCount", "How many rings the silhouette profile uses (detail vs performance).");
+
     }
 
     private static JsonObject deepMerge(JsonObject base, JsonObject override) {
@@ -344,48 +372,121 @@ public class GuiSpeciesEditorScreen extends GuiScreen {
             setJsonValue(rootJson, p, en.toJsonElement());
         }
     }
+    @Override
+    public void onResize(Minecraft mcIn, int w, int h) {
+        super.onResize(mcIn, w, h);
+        this.initGui(); // ✅ only rebuild layout when MC tells us the window resized
+    }
 
     @Override
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
+        com.jubitus.birds.client.gui.GuiGlStateReset.reset();
         this.drawDefaultBackground();
 
-        if (this.width != lastW || this.height != lastH) {
-            lastW = this.width;
-            lastH = this.height;
-            this.initGui();
-        }
 
-
-        // title
+        // title + UI
         String title = "Edit Species: " + (species.name != null ? species.name : species.folderName);
         this.drawString(this.fontRenderer, title, 10, 10, 0xFFFFFF);
 
-        // left: entry list
         if (entryList != null) entryList.drawScreen(mouseX, mouseY, partialTicks);
 
-        // right: preview box
+        // ✅ if enough time passed since last typing, attempt preview rebuild safely
+        if (previewDirty && Minecraft.getSystemTime() >= previewRebuildAtMs) {
+            previewDirty = false;
+            rebuildPreviewSafely();
+        }
+
         drawPreviewBox(partialTicks);
 
         super.drawScreen(mouseX, mouseY, partialTicks);
 
-// textfields must draw after buttons/background
         for (JsonEntry e : entries) {
             if (e != null) e.drawTextField();
         }
 
-// ✅ tooltips (draw LAST so they appear on top)
         drawEntryTooltips(mouseX, mouseY);
-
+        com.jubitus.birds.client.gui.GuiGlStateReset.reset();
     }
+    private void rebuildPreviewSafely() {
+        // 1) GUI -> JSON
+        applyEntriesToJson();
+
+        // 2) Validate number fields BEFORE doing expensive silhouette rebuild
+        //    If any number field currently has invalid text (not even partial), skip rebuild.
+        for (JsonEntry e : entries) {
+            if (e == null) continue;
+            if (e.kind != JsonEntry.Kind.NUMBER) continue;
+            if (e.tf == null) continue;
+
+            String t = e.tf.getText();
+            if (!isPartialNumberText(t)) {
+                // keep last good preview; do not rebuild
+                return;
+            }
+        }
+
+        // 3) Optional: keep a snapshot of last good JSON to use for preview (super stable)
+        if (lastGoodPreviewJson == null) lastGoodPreviewJson = deepCopyJson(rootJson);
+
+        // 4) Now check if all numbers are actually parseable (not just "partial")
+        //    If some are partial ("" or "-" or "0."), we also skip rebuild.
+        for (JsonEntry e : entries) {
+            if (e == null) continue;
+            if (e.kind != JsonEntry.Kind.NUMBER) continue;
+            if (e.tf == null) continue;
+
+            String t = e.tf.getText().trim();
+            if (t.isEmpty() || t.equals("-") || t.equals(".") || t.equals("-.") ) {
+                return; // still typing -> don't rebuild yet
+            }
+            if (tryParseDoubleStrict(t) == null) {
+                return; // shouldn't happen due to step 2, but safe
+            }
+        }
+
+        // 5) If we reached here, the JSON is “good enough” to apply.
+        lastGoodPreviewJson = deepCopyJson(rootJson);
+
+        // 6) Apply silhouette settings to the species used for preview
+        //    This depends on how you implemented per-species silhouette settings.
+        //    The usual pattern is: species.silhouette = parse from json.
+        //    If your BirdSpeciesLoader already loads it, just call your parser here.
+
+        // EASIEST: reload only this species from current rootJson
+        // (you can write a helper "BirdSpeciesLoader.applyJsonToExistingSpecies(species, rootJson)")
+        // For now, we just trigger a full reload (simple but heavier):
+        BirdSpeciesLoader.loadAllSpecies();
+
+        // 7) Purge birds so in-world matches (optional)
+        // if (BirdManager.INSTANCE != null) BirdManager.INSTANCE.clearAllBirds();
+
+        // 8) Force silhouette cache rebuild for preview texture if you have a per-texture rebuild helper.
+        // If you don't, step 6 should do it on next render.
+        // Example:
+        // ResourceLocation tex = pickPreviewTexture();
+        // BirdSilhouetteCache.rebuild(tex, species.getSilhouetteSettings());
+    }
+
+    private static JsonObject deepCopyJson(JsonObject src) {
+        if (src == null) return new JsonObject();
+        return new JsonParser().parse(src.toString()).getAsJsonObject();
+    }
+
 
     @Override
     protected void keyTyped(char typedChar, int keyCode) throws IOException {
         // let textfields eat input first
         for (JsonEntry e : entries) {
-            if (e != null && e.keyTyped(typedChar, keyCode)) return;
+            if (e != null && e.keyTyped(typedChar, keyCode)) {
+                // ✅ schedule preview rebuild (debounce)
+                previewDirty = true;
+                previewRebuildAtMs = Minecraft.getSystemTime() + 150L; // 150ms after last input
+                return;
+            }
         }
         super.keyTyped(typedChar, keyCode);
     }
+
 
     @Override
     protected void mouseClicked(int mouseX, int mouseY, int mouseButton) throws IOException {
@@ -404,40 +505,42 @@ public class GuiSpeciesEditorScreen extends GuiScreen {
 
     @Override
     protected void actionPerformed(GuiButton button) throws IOException {
-        if (button.id == 2) { // cancel
+        if (button.id == 2) {
             this.mc.displayGuiScreen(parent);
             return;
         }
 
-        if (button.id == 3) { // reload from disk
+        if (button.id == 3) {
             BirdSpeciesLoader.loadAllSpecies();
+            refreshSpeciesFromRegistry();
             this.initGui();
             return;
         }
 
-
-        if (button.id == 1) { // save
-            // push GUI -> JSON
+        if (button.id == 1) {
             applyEntriesToJson();
 
-            // write file
             try {
                 Gson g = new GsonBuilder().setPrettyPrinting().create();
                 String out = g.toJson(rootJson);
                 Files.write(propertiesPath(), out.getBytes(StandardCharsets.UTF_8), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
 
-                // reload systems (same spirit as your /jubitusbirdsreload)
                 BirdSpeciesLoader.loadAllSpecies();
+                refreshSpeciesFromRegistry();
+
                 BirdSoundSystem.reloadSoundsOnly();
                 if (BirdManager.INSTANCE != null) BirdManager.INSTANCE.clearAllBirds();
 
-                if (mc.player != null)
+                if (mc.player != null) {
                     mc.player.sendMessage(new TextComponentString("§a[JubitusBirds] Saved + reloaded " + species.folderName));
+                }
+
                 this.mc.displayGuiScreen(parent);
 
             } catch (Exception ex) {
-                if (mc.player != null)
+                if (mc.player != null) {
                     mc.player.sendMessage(new TextComponentString("§c[JubitusBirds] Save failed: " + ex.getMessage()));
+                }
             }
         }
     }
@@ -541,7 +644,43 @@ public class GuiSpeciesEditorScreen extends GuiScreen {
         drawPreviewFrame(x0, y0, x1, y1, getDaySkyARGB(), 0xFF000000);
 
 
-        drawTurntable3D(tex, cx, cy, size, yaw);
+// Sync current text fields into rootJson so preview uses live edited values
+        applyEntriesToJson();
+
+// Candidate from GUI
+        BirdSpecies.SilhouetteSettings candidate = readSilhouetteFromRootJson();
+        candidate.clamp();
+
+// Try render with candidate
+        boolean ok = com.jubitus.birds.client.gui.GuiBirdPreviewRenderer.drawSilhouetteTurntable(
+                tex,
+                candidate,
+                cx, cy,
+                size,
+                yaw
+        );
+
+        if (ok) {
+            // ✅ candidate works -> commit it
+            previewSil = candidate;
+            lastGoodPreviewSil = candidate.copy();
+        } else {
+            // ❌ candidate failed -> render again with last good settings (preview never disappears)
+            previewSil = lastGoodPreviewSil;
+
+            com.jubitus.birds.client.gui.GuiBirdPreviewRenderer.drawSilhouetteTurntable(
+                    tex,
+                    previewSil,
+                    cx, cy,
+                    size,
+                    yaw
+            );
+        }
+
+        lastPreviewSilHash = previewSil.stableHash();
+
+
+
 
     }
 
@@ -683,6 +822,17 @@ public class GuiSpeciesEditorScreen extends GuiScreen {
         // (You have soundSingle/soundFlock in your BirdSpecies class)
         // root.add("soundSingle", buildDefaultSoundSettings());
         // root.add("soundFlock", buildDefaultSoundSettings());
+        JsonObject sil = new JsonObject();
+        sil.addProperty("alphaThreshold", 12);
+        sil.addProperty("smoothRadius", 1);
+        sil.addProperty("densityPow", 1.8);
+        sil.addProperty("bellPow", 1.2);
+        sil.addProperty("thickGain", 0.48);
+        sil.addProperty("coreWidthFact", 0.4);
+        sil.addProperty("coreThickFact", 0.8);
+        sil.addProperty("ringCount", 7);
+
+        root.add("silhouette", sil);
 
         return root;
     }
@@ -707,53 +857,6 @@ public class GuiSpeciesEditorScreen extends GuiScreen {
         return size;
     }
 
-    private void drawTurntable3D(ResourceLocation tex, int centerX, int centerY, int size, float yawDeg) {
-        this.mc.getTextureManager().bindTexture(tex);
-
-        GlStateManager.pushMatrix();
-        GlStateManager.enableBlend();
-        GlStateManager.color(1f, 1f, 1f, 1f);
-
-        // Pour voir les 2 faces (plane)
-        GlStateManager.disableCull();
-
-        // Depth aide un peu (sinon ça peut faire “plat” selon l’ordre)
-        GlStateManager.enableDepth();
-        GlStateManager.depthMask(true);
-
-        // Place l’objet au centre du panneau, avec un peu de profondeur
-        GlStateManager.translate((float) centerX, (float) centerY, 200f);
-
-        // Scale en "pixels" (on va dessiner un quad -1..1)
-        float s = size / 2f;
-        GlStateManager.scale(s, s, s);
-
-        // ✅ “Caméra au-dessus” => on tilt l’objet (pitch fixe)
-        float pitch = 25f; // monte à 35f si tu veux plus "vue du dessus"
-        GlStateManager.rotate(pitch, 1f, 0f, 0f);
-
-        // ✅ Spin 3D sur lui-même : rotation autour de l’axe vertical (Y)
-        GlStateManager.rotate(yawDeg, 0f, 1f, 0f);
-
-        // Quad dans le plan XZ (y=0)
-        // UV standard 0..1
-        Tessellator tess = Tessellator.getInstance();
-        BufferBuilder buf = tess.getBuffer();
-        buf.begin(GL11.GL_QUADS, DefaultVertexFormats.POSITION_TEX);
-
-        // (x, y, z)
-        buf.pos(-1, 0, +1).tex(0, 0).endVertex();
-        buf.pos(+1, 0, +1).tex(1, 0).endVertex();
-        buf.pos(+1, 0, -1).tex(1, 1).endVertex();
-        buf.pos(-1, 0, -1).tex(0, 1).endVertex();
-
-        tess.draw();
-
-        GlStateManager.disableDepth();
-        GlStateManager.enableCull();
-        GlStateManager.disableBlend();
-        GlStateManager.popMatrix();
-    }
 
     private int getDaySkyARGB() {
         return 0xFF7BA4FF; // ciel "jour" constant
@@ -934,6 +1037,27 @@ public class GuiSpeciesEditorScreen extends GuiScreen {
 
 
             if (tf != null) tf.drawTextBox();
+            if (tf != null) {
+                tf.drawTextBox();
+
+                if (kind == Kind.NUMBER) {
+                    String t = tf.getText();
+                    boolean ok = isPartialNumberText(t); // uses the helper above
+
+                    // If it's NOT ok, draw a red 1px border around the text field
+                    if (!ok) {
+                        int x0 = tf.x - 1;
+                        int y0 = tf.y - 1;
+                        int x1 = tf.x + tf.width + 1;
+                        int y1 = tf.y + tf.height + 1;
+                        net.minecraft.client.gui.Gui.drawRect(x0, y0, x1, y0 + 1, 0xFFFF3333); // top
+                        net.minecraft.client.gui.Gui.drawRect(x0, y1 - 1, x1, y1, 0xFFFF3333); // bottom
+                        net.minecraft.client.gui.Gui.drawRect(x0, y0, x0 + 1, y1, 0xFFFF3333); // left
+                        net.minecraft.client.gui.Gui.drawRect(x1 - 1, y0, x1, y1, 0xFFFF3333); // right
+                    }
+                }
+            }
+
             if (toggleBtn != null) toggleBtn.drawButton(Minecraft.getMinecraft(), mouseX, mouseY, partialTicks);
 
         }
@@ -1008,6 +1132,86 @@ public class GuiSpeciesEditorScreen extends GuiScreen {
         }
 
         enum Kind {HEADER, BOOL, NUMBER, STRING, ARRAY}
+    }
+    private BirdSpecies.SilhouetteSettings readSilhouetteFromRootJson() {
+        BirdSpecies.SilhouetteSettings s = new BirdSpecies.SilhouetteSettings();
+
+        if (rootJson != null && rootJson.has("silhouette") && rootJson.get("silhouette").isJsonObject()) {
+            JsonObject o = rootJson.getAsJsonObject("silhouette");
+
+            if (o.has("alphaThreshold")) s.alphaThreshold = o.get("alphaThreshold").getAsInt();
+            if (o.has("smoothRadius"))   s.smoothRadius   = o.get("smoothRadius").getAsInt();
+            if (o.has("densityPow"))     s.densityPow     = o.get("densityPow").getAsFloat();
+            if (o.has("bellPow"))        s.bellPow        = o.get("bellPow").getAsFloat();
+            if (o.has("thickGain"))      s.thickGain      = o.get("thickGain").getAsFloat();
+            if (o.has("coreWidthFact"))  s.coreWidthFact  = o.get("coreWidthFact").getAsFloat();
+            if (o.has("coreThickFact"))  s.coreThickFact  = o.get("coreThickFact").getAsFloat();
+            if (o.has("ringCount"))      s.ringCount      = o.get("ringCount").getAsInt();
+        }
+
+        s.clamp();
+        return s;
+    }
+    private void refreshSpeciesFromRegistry() {
+        for (BirdSpecies s : BirdSpeciesRegistry.all()) {
+            if (s != null && speciesFolder.equals(s.folderName)) {
+                this.species = s;
+                return;
+            }
+        }
+    }
+    private static boolean isPartialNumberText(String s) {
+        if (s == null) return true;
+        s = s.trim();
+        if (s.isEmpty()) return true;   // user is typing
+        if (s.equals("-")) return true; // user is typing negative
+        if (s.equals(".")) return true; // user is typing decimal
+        if (s.equals("-.")) return true;
+
+        // Accept normal numbers: 12, 12.3, .5, 0.5, -3.2, 1e-3, etc
+        try {
+            Double.parseDouble(s);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** returns null if not parseable (but partial typing is handled separately) */
+    private static Double tryParseDoubleStrict(String s) {
+        if (s == null) return null;
+        s = s.trim();
+        if (s.isEmpty()) return null;
+        try {
+            return Double.parseDouble(s);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+    private boolean silhouetteInputsAreValidForLivePreview() {
+        for (JsonEntry e : entries) {
+            if (e == null) continue;
+            if (e.kind != JsonEntry.Kind.NUMBER) continue;
+            if (e.tf == null) continue;
+            if (e.path == null) continue;
+
+            // Only care about silhouette.* numbers
+            if (!e.path.startsWith("silhouette.")) continue;
+
+            String t = e.tf.getText();
+            // If user typed junk like "1..2" => don't update preview
+            if (!isPartialNumberText(t)) return false;
+
+            // If user is mid-typing like "-" or "" or "0." => don't update preview yet
+            String s = t.trim();
+            if (s.isEmpty() || s.equals("-") || s.equals(".") || s.equals("-.") ) return false;
+        }
+        return true;
+    }
+
+    @Override
+    public void onGuiClosed() {
+        super.onGuiClosed();
     }
 
 }

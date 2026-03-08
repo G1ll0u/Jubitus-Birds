@@ -1,5 +1,7 @@
 package com.jubitus.birds.species;
 
+import com.jubitus.birds.client.util.BirdEnvironment;
+import com.jubitus.birds.client.util.spawn.BirdSpawnController;
 import net.minecraft.world.biome.Biome;
 import net.minecraftforge.common.BiomeDictionary;
 import net.minecraftforge.common.BiomeManager;
@@ -135,6 +137,53 @@ public class BirdSpeciesRegistry {
         }
 
         return true;
+    }
+    public static BirdSpecies pickForBiomeWithContext(net.minecraft.world.World world,
+                                                      Biome biome,
+                                                      Random rng,
+                                                      boolean isDay,
+                                                      BirdSpawnController controller,
+                                                      long nowTick) {
+        if (biome == null) return null;
+
+        java.util.List<BirdSpecies> allowed = new java.util.ArrayList<>();
+        java.util.List<Double> weights = new java.util.ArrayList<>();
+        double totalW = 0.0;
+
+        for (BirdSpecies s : BY_NAME.values()) {
+            if (s == null || !s.enabled) continue;
+            if (!isBiomeAllowed(s, biome)) continue;
+
+            if (isDay && !s.canSpawnAtDay) continue;
+            if (!isDay && !s.canSpawnAtNight) continue;
+
+            BirdSpecies.BirdSpeciesView view = s.viewForTime(isDay);
+
+            double w = view.spawnWeight();
+            if (w <= 0) continue;
+
+            // NEW: day/night + weather + time-of-day realism multiplier
+            double envMul = BirdEnvironment.spawnMultiplier(world, s, isDay);
+            w *= envMul;
+
+            if (w <= 0.0001) continue;
+
+            // NEW: density controller gating (cooldown + per-species cap + global budget)
+            if (controller != null && !controller.canStartSpeciesSpawn(s, nowTick)) continue;
+
+            allowed.add(s);
+            weights.add(w);
+            totalW += w;
+        }
+
+        if (allowed.isEmpty()) return null;
+
+        double roll = rng.nextDouble() * totalW;
+        for (int i = 0; i < allowed.size(); i++) {
+            roll -= weights.get(i);
+            if (roll <= 0) return allowed.get(i);
+        }
+        return allowed.get(allowed.size() - 1);
     }
 
 

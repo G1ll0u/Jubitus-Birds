@@ -23,6 +23,8 @@ public class GuiSpeciesListScreen extends GuiScreen {
     private final List<BirdSpecies> species = new ArrayList<>();
     private SpeciesSlotList list;
     private GuiButton btnMainOptions; // ✅ new
+    private int previewColX0;
+    private int previewColX1;
 
     public GuiSpeciesListScreen(GuiScreen parent) {
         this.parent = parent;
@@ -39,7 +41,9 @@ public class GuiSpeciesListScreen extends GuiScreen {
 
     @Override
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
-        this.drawDefaultBackground();
+        com.jubitus.birds.client.gui.GuiGlStateReset.reset();
+
+        this.drawBackground(0); // ✅ REPLACE drawDefaultBackground() with this
 
         if (list != null) list.drawScreen(mouseX, mouseY, partialTicks);
 
@@ -47,12 +51,15 @@ public class GuiSpeciesListScreen extends GuiScreen {
 
         if (species.isEmpty()) {
             this.drawCenteredString(this.fontRenderer,
-                    "No default_species loaded. (Check config/jubitusbirds/default_species)",
+                    "No species loaded. (Check config/jubitusbirds/species)",
                     this.width / 2, this.height / 2, 0xFFAAAA);
         }
 
         super.drawScreen(mouseX, mouseY, partialTicks);
+
+        com.jubitus.birds.client.gui.GuiGlStateReset.reset();
     }
+
 
     @Override
     protected void actionPerformed(GuiButton button) throws IOException {
@@ -64,8 +71,6 @@ public class GuiSpeciesListScreen extends GuiScreen {
         if (button.id == 1) {
             this.mc.displayGuiScreen(new JubitusMainConfigGui(this));
         }
-
-
     }
 
     @Override
@@ -78,16 +83,18 @@ public class GuiSpeciesListScreen extends GuiScreen {
         int top = 28;
         int bottom = this.height - 28;
 
-        this.list = new SpeciesSlotList(this, this.mc, this.width, this.height, top, bottom, 28);
+        int slotH = 28;
 
+        // ✅ full width list
+        this.list = new SpeciesSlotList(this, this.mc, this.width, this.height, top, bottom, slotH);
 
-        // bottom-right done
         this.buttonList.add(new GuiButton(0, this.width - 110, this.height - 24, 100, 20, "Done"));
 
-        // ✅ bottom-left main options
-        this.btnMainOptions = new GuiButton(1, 10, this.height - 24, 140, 20, "Main options menu");
+        this.btnMainOptions = new GuiButton(1, 10, this.height - 24, 140, 20, "Birds options");
         this.buttonList.add(this.btnMainOptions);
     }
+
+
 
     @Override
     public void handleMouseInput() throws IOException {
@@ -106,50 +113,8 @@ public class GuiSpeciesListScreen extends GuiScreen {
     }
 
     // Tiny 3D turntable preview (same spirit as the editor one)
-    void drawTinyTurntable3D(ResourceLocation tex, int centerX, int centerY, int size, float yawDeg) {
-        if (tex == null) return;
 
-        Minecraft mc = Minecraft.getMinecraft();
-        mc.getTextureManager().bindTexture(tex);
 
-        GlStateManager.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_NEAREST);
-        GlStateManager.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_NEAREST);
-
-        GlStateManager.pushMatrix();
-        GlStateManager.enableBlend();
-        GlStateManager.disableCull();     // show both sides
-        GlStateManager.disableLighting(); // GUI friendly
-        GlStateManager.color(1f, 1f, 1f, 1f);
-
-        // ✅ No depth: avoids weirdness with GUI scale / other GUI elements
-        GlStateManager.disableDepth();
-
-        GlStateManager.translate((float) centerX, (float) centerY, 0f);
-
-        float s = size / 2f;
-        GlStateManager.scale(s, s, s);
-
-        // “camera above”
-        GlStateManager.rotate(25f, 1f, 0f, 0f);
-
-        // 3D spin
-        GlStateManager.rotate(yawDeg, 0f, 1f, 0f);
-
-        Tessellator tess = Tessellator.getInstance();
-        BufferBuilder buf = tess.getBuffer();
-        buf.begin(GL11.GL_QUADS, DefaultVertexFormats.POSITION_TEX);
-
-        buf.pos(-1, 0, +1).tex(0, 0).endVertex();
-        buf.pos(+1, 0, +1).tex(1, 0).endVertex();
-        buf.pos(+1, 0, -1).tex(1, 1).endVertex();
-        buf.pos(-1, 0, -1).tex(0, 1).endVertex();
-
-        tess.draw();
-
-        GlStateManager.enableCull();
-        GlStateManager.disableBlend();
-        GlStateManager.popMatrix();
-    }
 
     // Couleur ciel vanilla (biome/heure). Fallback si world/player pas dispo.
     int getDaySkyARGB() {
@@ -157,17 +122,23 @@ public class GuiSpeciesListScreen extends GuiScreen {
     }
 
 
-    void drawPreviewFrame(int x0, int y0, int x1, int y1, int fillARGB) {
-        // Fond
+    void drawPreviewFrame(int x0, int y0, int x1, int y1, int fillARGB, int borderARGB) {
+        // fill
         net.minecraft.client.gui.Gui.drawRect(x0, y0, x1, y1, fillARGB);
 
-        // Cadre noir 1px
-        int black = 0xFF000000;
-        net.minecraft.client.gui.Gui.drawRect(x0, y0, x1, y0 + 1, black);       // top
-        net.minecraft.client.gui.Gui.drawRect(x0, y1 - 1, x1, y1, black);       // bottom
-        net.minecraft.client.gui.Gui.drawRect(x0, y0, x0 + 1, y1, black);       // left
-        net.minecraft.client.gui.Gui.drawRect(x1 - 1, y0, x1, y1, black);       // right
+        // 1px border
+        net.minecraft.client.gui.Gui.drawRect(x0, y0, x1, y0 + 1, borderARGB);       // top
+        net.minecraft.client.gui.Gui.drawRect(x0, y1 - 1, x1, y1, borderARGB);       // bottom
+        net.minecraft.client.gui.Gui.drawRect(x0, y0, x0 + 1, y1, borderARGB);       // left
+        net.minecraft.client.gui.Gui.drawRect(x1 - 1, y0, x1, y1, borderARGB);       // right
     }
 
+    @Override
+    public void onGuiClosed() {
+        super.onGuiClosed();
+    }
+
+    int getPreviewColX0() { return previewColX0; }
+    int getPreviewColX1() { return previewColX1; }
 }
 

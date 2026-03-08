@@ -37,8 +37,8 @@ public class CommandJubitusBirdsReload extends CommandBase implements IClientCom
             BirdManager.INSTANCE.clearAllBirds();
         }
 
-        JubitusBirds.LOGGER.info("[JubitusBirds] Reloaded default_species via command.");
-        sender.sendMessage(new TextComponentString("§a[JubitusBirds] Reloaded default_species + cleared birds."));
+        JubitusBirds.LOGGER.info("[JubitusBirds] Reloaded species via command.");
+        sender.sendMessage(new TextComponentString("§a[JubitusBirds] Reloaded species + cleared birds."));
     }
 
     // ⭐ This is the key for TAB autocomplete visibility

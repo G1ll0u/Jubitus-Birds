@@ -40,7 +40,7 @@ public class CommandJubitusBirdsPlaySound extends CommandBase implements IClient
 
         if (args.length < 1) {
             sender.sendMessage(new TextComponentString("§eUsage: " + getUsage(sender)));
-            sender.sendMessage(new TextComponentString("§eLoaded default_species keys: " + BirdSoundSystem.getAllSpeciesKeys()));
+            sender.sendMessage(new TextComponentString("§eLoaded species keys: " + BirdSoundSystem.getAllSpeciesKeys()));
             return;
         }
 
@@ -53,7 +53,7 @@ public class CommandJubitusBirdsPlaySound extends CommandBase implements IClient
 
         if (!BirdSoundSystem.hasSounds(key, type)) {
             sender.sendMessage(new TextComponentString("§cNo sounds registered for speciesKey='" + key + "' type=" + type + "."));
-            sender.sendMessage(new TextComponentString("§eLoaded default_species keys: " + BirdSoundSystem.getAllSpeciesKeys()));
+            sender.sendMessage(new TextComponentString("§eLoaded species keys: " + BirdSoundSystem.getAllSpeciesKeys()));
             return;
         }
         ResourceLocation rl = BirdSoundSystem.getCallEvent(key, type);
