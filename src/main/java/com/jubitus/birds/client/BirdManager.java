@@ -1,5 +1,6 @@
 package com.jubitus.birds.client;
 
+import com.jubitus.birds.JubitusBirds;
 import com.jubitus.birds.client.config.BirdConfig;
 import com.jubitus.birds.client.sound.BirdSoundSystem;
 import com.jubitus.birds.client.util.Flock;
@@ -154,10 +155,15 @@ public class BirdManager {
     public void onRenderWorldLast(RenderWorldLastEvent e) {
         Minecraft mc = Minecraft.getMinecraft();
         if (mc == null || mc.world == null || mc.player == null) return;
-
         if (mc.currentScreen != null) return;
+        if (birdsById.isEmpty()) return;
 
-        RenderBird.renderAll(birdsById.values(), e.getPartialTicks());
+        try {
+            RenderBird.renderAll(birdsById.values(), e.getPartialTicks());
+        } catch (Throwable t) {
+            JubitusBirds.LOGGER.error("[JubitusBirds] Bird render failed. Disabling bad frame safely.", t);
+            com.jubitus.birds.render.BirdRenderSafety.hardReset(mc);
+        }
     }
 
     public void clearAllBirds() {
