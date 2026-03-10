@@ -5,6 +5,13 @@ import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.OpenGlHelper;
 import org.lwjgl.opengl.GL11;
 
+
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.GlStateManager;
+import net.minecraft.client.renderer.OpenGlHelper;
+import org.lwjgl.opengl.GL11;
+
+
 public final class BirdRenderSafety {
 
     private BirdRenderSafety() {
@@ -15,21 +22,17 @@ public final class BirdRenderSafety {
 
         GlStateManager.pushMatrix();
 
-        GlStateManager.enableTexture2D();
-        GlStateManager.enableBlend();
-        GlStateManager.tryBlendFuncSeparate(
-                GlStateManager.SourceFactor.SRC_ALPHA, GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA,
-                GlStateManager.SourceFactor.ONE, GlStateManager.DestFactor.ZERO
-        );
+        OpenGlHelper.setActiveTexture(OpenGlHelper.defaultTexUnit);
+        GlStateManager.matrixMode(GL11.GL_MODELVIEW);
 
+        GlStateManager.enableTexture2D();
+        GlStateManager.disableBlend();
         GlStateManager.enableAlpha();
-        GlStateManager.alphaFunc(GL11.GL_GREATER, 0.1F);
+        GlStateManager.alphaFunc(GL11.GL_GREATER, 0.5F);
 
         GlStateManager.enableDepth();
         GlStateManager.depthFunc(GL11.GL_LEQUAL);
-
-        // Important: do not write depth in RenderWorldLast
-        GlStateManager.depthMask(false);
+        GlStateManager.depthMask(true);
 
         GlStateManager.disableCull();
         GlStateManager.disableLighting();
@@ -38,16 +41,13 @@ public final class BirdRenderSafety {
         GlStateManager.color(1f, 1f, 1f, 1f);
         GlStateManager.resetColor();
 
+        // Do not use world lightmap for birds
         if (mc != null && mc.entityRenderer != null) {
-            mc.entityRenderer.enableLightmap();
+            mc.entityRenderer.disableLightmap();
         }
     }
 
     public static void endWorldBirdRender(Minecraft mc) {
-        if (mc != null && mc.entityRenderer != null) {
-            mc.entityRenderer.disableLightmap();
-        }
-
         try {
             GlStateManager.popMatrix();
         } catch (Exception ignored) {
@@ -69,18 +69,13 @@ public final class BirdRenderSafety {
         GlStateManager.matrixMode(GL11.GL_MODELVIEW);
 
         GlStateManager.enableTexture2D();
-        GlStateManager.enableBlend();
-        GlStateManager.tryBlendFuncSeparate(
-                GlStateManager.SourceFactor.SRC_ALPHA, GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA,
-                GlStateManager.SourceFactor.ONE, GlStateManager.DestFactor.ZERO
-        );
-
+        GlStateManager.disableBlend();
         GlStateManager.enableAlpha();
-        GlStateManager.alphaFunc(GL11.GL_GREATER, 0.1F);
+        GlStateManager.alphaFunc(GL11.GL_GREATER, 0.5F);
 
         GlStateManager.enableDepth();
         GlStateManager.depthFunc(GL11.GL_LEQUAL);
-        GlStateManager.depthMask(false);
+        GlStateManager.depthMask(true);
 
         GlStateManager.disableCull();
         GlStateManager.disableLighting();
@@ -88,6 +83,10 @@ public final class BirdRenderSafety {
         GlStateManager.colorMask(true, true, true, true);
         GlStateManager.color(1f, 1f, 1f, 1f);
         GlStateManager.resetColor();
+
+        if (mc != null && mc.entityRenderer != null) {
+            mc.entityRenderer.disableLightmap();
+        }
     }
 
     public static void hardReset(Minecraft mc) {

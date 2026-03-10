@@ -3,31 +3,21 @@ package com.jubitus.birds.render;
 import com.jubitus.birds.client.ClientBird;
 import com.jubitus.birds.species.BirdSpecies;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.BufferBuilder;
+
 import net.minecraft.client.renderer.GlStateManager;
-import net.minecraft.client.renderer.OpenGlHelper;
-import net.minecraft.client.renderer.Tessellator;
+
 import net.minecraft.client.renderer.culling.Frustum;
-import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
+
 import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.EnumSkyBlock;
 import org.lwjgl.opengl.GL11;
 
 import java.util.Collection;
 
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.GlStateManager;
-import net.minecraft.client.renderer.OpenGlHelper;
-import net.minecraft.client.renderer.culling.Frustum;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.math.AxisAlignedBB;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Vec3d;
-import org.lwjgl.opengl.GL11;
 
-import java.util.Collection;
 
 public class RenderBird {
 
@@ -39,7 +29,6 @@ public class RenderBird {
     private static final double LOD_LOW_DIST = 128.0;
     private static final double CULL_EXTRA = 2.0;
 
-    private static final int LOD_HIGH_RINGS = 7;
     private static final int LOD_MED_RINGS = 6;
     private static final int LOD_LOW_RINGS = 5;
     private static final int LOD_ULTRA_RINGS = 4;
@@ -50,6 +39,9 @@ public class RenderBird {
     private static final byte LOD_ULTRA = 3;
 
     private static final int LOD_UPDATE_EVERY_TICKS = 5;
+
+    private RenderBird() {
+    }
 
     public static void renderAll(Collection<ClientBird> birds, float partialTicks) {
         Minecraft mc = Minecraft.getMinecraft();
@@ -68,6 +60,10 @@ public class RenderBird {
         BirdRenderSafety.beginWorldBirdRender(mc);
 
         try {
+            GlStateManager.disableBlend();
+            GlStateManager.enableAlpha();
+            GlStateManager.alphaFunc(GL11.GL_GREATER, 0.5F);
+
             for (ClientBird b : birds) {
                 if (b == null || b.pos == null) continue;
 
@@ -79,8 +75,7 @@ public class RenderBird {
                     double iy = p0.y + (p1.y - p0.y) * partialTicks;
                     double iz = p0.z + (p1.z - p0.z) * partialTicks;
 
-                    float alpha = fogFadeAlpha(mc, camPos, ix, iy, iz);
-                    if (alpha <= 0.01f) continue;
+                    if (!isInsideHardRenderDistance(mc, camPos, ix, iy, iz)) continue;
 
                     double dx = ix - camPos.x;
                     double dy = iy - camPos.y;
@@ -99,7 +94,7 @@ public class RenderBird {
 
                     if (!frustum.isBoundingBoxInFrustum(bb)) continue;
 
-                    renderOneSafe(b, camPos, partialTicks, lodByte, alpha);
+                    renderOneOpaqueAdaptiveLit(b, camPos, partialTicks, lodByte);
                     BirdRenderSafety.resetAfterEachBird(mc);
 
                 } catch (Throwable ignored) {
@@ -111,7 +106,7 @@ public class RenderBird {
         }
     }
 
-    private static void renderOneSafe(ClientBird b, Vec3d camPos, float partialTicks, byte lodByte, float fogAlpha) {
+    private static void renderOneOpaqueAdaptiveLit(ClientBird b, Vec3d camPos, float partialTicks, byte lodByte) {
         Minecraft mc = Minecraft.getMinecraft();
         if (mc == null || mc.world == null) return;
 
@@ -140,6 +135,8 @@ public class RenderBird {
         LoftedBirdMesh.SilhouetteProfile outerProfile = pickOuterProfile(tex, sil, shape, lodByte);
         if (outerProfile == null) return;
 
+        float brightness = computeBirdBrightness(ix, iy, iz);
+
         GlStateManager.pushMatrix();
         try {
             GlStateManager.translate(x, y, z);
@@ -155,31 +152,22 @@ public class RenderBird {
             GlStateManager.rotate(pitch, 1f, 0f, 0f);
             GlStateManager.rotate(roll, 0f, 0f, 1f);
 
-            int bx = (int) Math.floor(ix);
-            int by = (int) Math.floor(iy);
-            int bz = (int) Math.floor(iz);
-            int packedLight = mc.world.getCombinedLight(new BlockPos(bx, by, bz), 0);
-            int lu = packedLight & 0xFFFF;
-            int lv = (packedLight >> 16) & 0xFFFF;
-            OpenGlHelper.setLightmapTextureCoords(OpenGlHelper.lightmapTexUnit, (float) lu, (float) lv);
-            OpenGlHelper.setActiveTexture(OpenGlHelper.defaultTexUnit);
-
-            mc.getTextureManager().bindTexture(tex);
-
             GlStateManager.enableTexture2D();
-            GlStateManager.enableBlend();
+            GlStateManager.disableBlend();
             GlStateManager.enableAlpha();
+            GlStateManager.alphaFunc(GL11.GL_GREATER, 0.5F);
+
             GlStateManager.enableDepth();
             GlStateManager.depthFunc(GL11.GL_LEQUAL);
-
-            // Important: do not poison depth for hand/item rendering
-            GlStateManager.depthMask(false);
+            GlStateManager.depthMask(true);
 
             GlStateManager.disableCull();
             GlStateManager.disableLighting();
 
             GlStateManager.colorMask(true, true, true, true);
-            GlStateManager.color(1f, 1f, 1f, fogAlpha);
+            GlStateManager.color(brightness, brightness, brightness, 1f);
+
+            mc.getTextureManager().bindTexture(tex);
 
             double time = mc.world.getTotalWorldTime() + partialTicks;
             double flap = b.getFlapAmplitude() * Math.sin((time + (b.getId() & 255L)) * b.getFlapSpeed());
@@ -189,27 +177,59 @@ public class RenderBird {
             double baseThickness = 0.22;
             double capOffset = 0.06;
 
-            // Safe optional solid core only on high LOD
-            if (lodByte == LOD_HIGH && shape.core != null) {
-                GlStateManager.disableTexture2D();
-                LoftedBirdMesh.drawSilhouetteColor(
-                        halfW, halfL, baseThickness,
-                        shape.core, capOffset * 0.9,
-                        shape.avgRGB, fogAlpha
-                );
-                GlStateManager.enableTexture2D();
-                mc.getTextureManager().bindTexture(tex);
-                GlStateManager.color(1f, 1f, 1f, fogAlpha);
-            }
-
             LoftedBirdMesh.drawSilhouetteTextured(
                     halfW, halfL, baseThickness,
                     outerProfile, capOffset
             );
 
+            GlStateManager.color(1f, 1f, 1f, 1f);
+
         } finally {
             GlStateManager.popMatrix();
         }
+    }
+
+    private static float computeBirdBrightness(double ix, double iy, double iz) {
+        Minecraft mc = Minecraft.getMinecraft();
+        if (mc == null || mc.world == null) return 1.0f;
+
+        BlockPos pos = new BlockPos(ix, iy, iz);
+
+        int sky = 15;
+        int block = 0;
+
+        try {
+            sky = mc.world.getLightFor(EnumSkyBlock.SKY, pos);
+            block = mc.world.getLightFor(EnumSkyBlock.BLOCK, pos);
+        } catch (Throwable ignored) {
+        }
+
+        float skyF = clamp01(sky / 15.0f);
+        float blockF = clamp01(block / 15.0f);
+
+        float celestial = 1.0f;
+        try {
+            celestial = 1.0f - mc.world.getCelestialAngleRadians(1.0f);
+            celestial = 0.5f + 0.5f * (float) Math.cos(mc.world.getCelestialAngleRadians(1.0f));
+            celestial = clamp01(celestial);
+        } catch (Throwable ignored) {
+        }
+
+        boolean raining = mc.world.isRaining();
+        boolean thundering = mc.world.isThundering();
+
+        float dayFactor = 0.35f + 0.65f * skyF;
+        float nightFactor = 0.20f + 0.80f * blockF;
+
+        float brightness = Math.max(dayFactor * celestial, nightFactor);
+
+        if (raining) brightness *= 0.92f;
+        if (thundering) brightness *= 0.82f;
+
+        // Safety floor and cap
+        brightness = clamp(brightness, 0.28f, 1.00f);
+
+        return brightness;
     }
 
     private static LoftedBirdMesh.SilhouetteProfile pickOuterProfile(ResourceLocation tex,
@@ -220,38 +240,26 @@ public class RenderBird {
             return shape.outer;
         }
         if (lodByte == LOD_MED) {
-            return BirdSilhouetteCache.getOuterLod(tex, sil, LOD_MED_RINGS);
+            LoftedBirdMesh.SilhouetteProfile p = BirdSilhouetteCache.getOuterLod(tex, sil, LOD_MED_RINGS);
+            return p != null ? p : shape.outer;
         }
         if (lodByte == LOD_LOW) {
-            return BirdSilhouetteCache.getOuterLod(tex, sil, LOD_LOW_RINGS);
+            LoftedBirdMesh.SilhouetteProfile p = BirdSilhouetteCache.getOuterLod(tex, sil, LOD_LOW_RINGS);
+            return p != null ? p : shape.outer;
         }
-        return BirdSilhouetteCache.getOuterLod(tex, sil, LOD_ULTRA_RINGS);
+
+        LoftedBirdMesh.SilhouetteProfile p = BirdSilhouetteCache.getOuterLod(tex, sil, LOD_ULTRA_RINGS);
+        return p != null ? p : shape.outer;
     }
 
-    private static float fogFadeAlpha(Minecraft mc, Vec3d camPos, double wx, double wy, double wz) {
+    private static boolean isInsideHardRenderDistance(Minecraft mc, Vec3d camPos, double wx, double wy, double wz) {
         double dx = wx - camPos.x;
         double dy = wy - camPos.y;
         double dz = wz - camPos.z;
         double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-        double fogEnd = mc.gameSettings.renderDistanceChunks * 16.0;
-
-        boolean underwater = mc.player != null &&
-                mc.player.isInsideOfMaterial(net.minecraft.block.material.Material.WATER);
-
-        double fogStart = underwater ? fogEnd * 0.10 : fogEnd * 0.65;
-        fogEnd = underwater ? fogEnd * 0.35 : fogEnd;
-
-        double denom = (fogEnd - fogStart);
-        if (denom <= 0.0001) return 1.0f;
-
-        double a = (fogEnd - dist) / denom;
-        if (a < 0.0) a = 0.0;
-        if (a > 1.0) a = 1.0;
-
-        if (underwater) a *= 0.7;
-
-        return (float) a;
+        double maxDist = mc.gameSettings.renderDistanceChunks * 16.0;
+        return dist <= maxDist;
     }
 
     private static byte pickLodHysteresis(ClientBird b, double dist) {
@@ -282,5 +290,13 @@ public class RenderBird {
         if (deg >= 180.0f) deg -= 360.0f;
         if (deg < -180.0f) deg += 360.0f;
         return deg;
+    }
+
+    private static float clamp01(float v) {
+        return v < 0f ? 0f : (v > 1f ? 1f : v);
+    }
+
+    private static float clamp(float v, float lo, float hi) {
+        return v < lo ? lo : (v > hi ? hi : v);
     }
 }
