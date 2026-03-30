@@ -42,6 +42,9 @@ public class GuiSpeciesEditorScreen extends GuiScreen {
     private final GuiScreen parent;
     private final String speciesFolder;
     private final List<JsonEntry> entries = new ArrayList<>();
+    // re-layout guard
+    private final int lastW = -1;
+    private final int lastH = -1;
     // Keep last silhouette settings that successfully built a preview
     private BirdSpecies.SilhouetteSettings lastGoodPreviewSil = new BirdSpecies.SilhouetteSettings();
     private boolean previewDirty = false;
@@ -49,9 +52,6 @@ public class GuiSpeciesEditorScreen extends GuiScreen {
     // optional: keep last good json snapshot so preview never “dies”
     private JsonObject lastGoodPreviewJson = null;
     private BirdSpecies species;
-    // re-layout guard
-    private final int lastW = -1;
-    private final int lastH = -1;
     private JsonObject rootJson;
     private EntrySlotList entryList;
     private GuiButton btnSave;

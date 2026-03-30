@@ -88,9 +88,6 @@ public class ConfigSoundsResourcePack implements IResourcePack {
                 size = -1;
             }
 
-            JubitusBirds.LOGGER.info("[JubitusBirds] Serving sound {} -> {} ({} bytes)",
-                    p, file.toAbsolutePath(), size);
-
             // IMPORTANT:
             // Use FileInputStream instead of Files.newInputStream to avoid interruptible NIO channel reads
             // that can throw ClosedByInterruptException on the sound thread.

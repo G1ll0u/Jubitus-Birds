@@ -175,12 +175,21 @@ public class JubitusBirdsConfig {
     public static class Spawning {
 
         @Config.Comment({
+                "Global dimension blacklist.",
+                "Birds will not spawn in these dimension IDs.",
+                "Examples: -1 for Nether, 1 for The End."
+        })
+        public int[] dimensionBlacklist = new int[]{-1, 1};
+
+        @Config.Comment({
                 "Deterministic spawn cell size (in BLOCKS).",
                 "The world is partitioned into cells; each cell may spawn birds/flocks per time window.",
                 "Higher values = fewer spawn checks and broader distribution."
         })
         @Config.RangeInt(min = 16, max = 1024)
         public int spawnCellSize = 128;
+
+
 
         @Config.Comment({
                 "Time window size (in TICKS) for deterministic spawning.",

@@ -1,5 +1,9 @@
 package com.jubitus.birds.client.config;
 
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
+
 /**
  * Runtime cache used by your spawn manager.
  * Values are copied from Forge @Config-backed JubitusBirdsConfig so GUI changes apply in-game.
@@ -48,6 +52,8 @@ public class BirdConfig {
     public static double echoMinThickness = 6.0;
     public static int echoCooldownTicks = 60;
 
+    public static int[] dimensionBlacklist = new int[0];
+    private static final Set<Integer> DIMENSION_BLACKLIST_SET = new HashSet<>();
 
     // Legacy/optional
     public static double despawnDistance = 256.0;
@@ -89,6 +95,12 @@ public class BirdConfig {
         underwaterPitchMul = JubitusBirdsConfig.SOUND.underwaterPitchMul;
 
         softTargetBirdsAroundPlayer = JubitusBirdsConfig.BORDERS.softTargetBirdsAroundPlayer;
+
+        dimensionBlacklist = Arrays.copyOf(
+                JubitusBirdsConfig.SPAWNING.dimensionBlacklist,
+                JubitusBirdsConfig.SPAWNING.dimensionBlacklist.length
+        );
+
 
 
         // Safety clamps
@@ -147,7 +159,12 @@ public class BirdConfig {
         if (loftCapOffset < 0.0) loftCapOffset = 0.0;
         if (loftCapOffset > 0.30) loftCapOffset = 0.30;
 
-
+        DIMENSION_BLACKLIST_SET.clear();
+        for (int dim : dimensionBlacklist) {
+            DIMENSION_BLACKLIST_SET.add(dim);
+        }
     }
-
+    public static boolean isDimensionBlacklisted(int dim) {
+        return DIMENSION_BLACKLIST_SET.contains(dim);
+    }
 }

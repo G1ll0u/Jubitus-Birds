@@ -26,6 +26,12 @@ public class BirdSpawnController {
                           int hardCap) {
 
         this.birdsByIdRef = birdsById;
+        if (birdsById == null || birdsById.isEmpty()) {
+            countBySpecies.clear();
+            remainingBySpecies.clear();
+        }
+
+        this.birdsByIdRef = birdsById;
 
         countBySpecies.clear();
         remainingBySpecies.clear();
