@@ -12,9 +12,6 @@ public class ModelBird extends ModelBase {
 
     private static final BirdSpecies.SilhouetteSettings DEFAULT_SIL = new BirdSpecies.SilhouetteSettings();
 
-    private static final double LOD_HIGH_DIST2 = 32.0 * 32.0;
-    private static final double LOD_MED_DIST2 = 64.0 * 64.0;
-    private static final double LOD_LOW_DIST2 = 128.0 * 128.0;
     private static final double LOD_HYST = 8.0;
 
     private static final byte LOD_HIGH = 0;

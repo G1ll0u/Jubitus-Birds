@@ -7,15 +7,6 @@ import org.lwjgl.opengl.GL11;
 
 public final class LoftedBirdMesh {
 
-    public static final Profile DEFAULT_PROFILE = new Profile(
-            new float[]{0.00f, 0.22f, 0.50f, 0.78f, 1.00f},
-            new float[]{0.30f, 0.85f, 1.00f, 0.80f, 0.38f},
-            new float[]{0.12f, 0.55f, 0.85f, 0.55f, 0.16f}
-    );
-    // Small UV inset so we don't sample the transparent border of the sprite.
-    // Increase slightly if you still see "holes" on sides.
-    private static final double UV_EPS = 0.025;
-
     private LoftedBirdMesh() {
     }
 
@@ -228,132 +219,6 @@ public final class LoftedBirdMesh {
         buf.pos(x3, y3, z3).color(r3, g3, b3, a3).endVertex();
     }
 
-    public static void drawLofted(
-            double halfW,
-            double halfL,
-            double baseThick,
-            Profile profile,
-            double capOffset
-    ) {
-        if (profile == null) profile = DEFAULT_PROFILE;
-        int n = profile.zT.length;
-        if (n < 2) return;
-
-        // UV ranges with inset
-        final double U0 = 0.0 + UV_EPS;
-        final double U1 = 1.0 - UV_EPS;
-        final double UM = 0.5;
-
-        Ring[] rings = new Ring[n];
-        for (int i = 0; i < n; i++) {
-            double t = clamp01(profile.zT[i]);
-            double z = lerp(-halfL, +halfL, t);
-            double v = 1.0 - t; // v=0 at head, v=1 at tail
-
-            double w = halfW * profile.wMul[i];
-
-            // thickness tied to width (thinner toward ends)
-            double tied = 0.35 + 0.65 * profile.wMul[i];
-            double th = baseThick * profile.tMul[i] * tied;
-
-            rings[i] = new Ring(z, v, w, th);
-        }
-
-        Tessellator tess = Tessellator.getInstance();
-        BufferBuilder buf = tess.getBuffer();
-
-        // BODY (closed tube): 4 quads per segment
-        buf.begin(GL11.GL_QUADS, DefaultVertexFormats.POSITION_TEX);
-
-        for (int i = 0; i < n - 1; i++) {
-            Ring a = rings[i];
-            Ring b = rings[i + 1];
-
-            // Outward winding (CCW when viewed from outside)
-
-            // Left face (x negative side)
-            quad(buf,
-                    a.xL, 0, a.z, U0, a.v,
-                    a.xL, 0, b.z, U0, b.v,
-                    0, b.yT, b.z, UM, b.v,
-                    0, a.yT, a.z, UM, a.v
-            );
-
-            // Top face (y positive)
-            quad(buf,
-                    0, a.yT, a.z, UM, a.v,
-                    0, b.yT, b.z, UM, b.v,
-                    b.xR, 0, b.z, U1, b.v,
-                    a.xR, 0, a.z, U1, a.v
-            );
-
-            // Right face (x positive side)
-            quad(buf,
-                    a.xR, 0, a.z, U1, a.v,
-                    b.xR, 0, b.z, U1, b.v,
-                    0, b.yB, b.z, UM, b.v,
-                    0, a.yB, a.z, UM, a.v
-            );
-
-            // Bottom face (y negative)
-            quad(buf,
-                    0, a.yB, a.z, UM, a.v,
-                    0, b.yB, b.z, UM, b.v,
-                    b.xL, 0, b.z, U0, b.v,
-                    a.xL, 0, a.z, U0, a.v
-            );
-        }
-
-        tess.draw();
-
-        // CAPS: head and tail (4 triangles each), making it a fully closed volume.
-        buf.begin(GL11.GL_TRIANGLES, DefaultVertexFormats.POSITION_TEX);
-
-        // Head cap (toward +Z)
-        Ring head = rings[n - 1];
-        double zh = head.z + capOffset;
-
-        // Tip uses UV at center (u=0.5) and same v as head ring
-        cap4(buf, head, zh, UM, U0, U1, true);
-
-        // Tail cap (toward -Z)
-        Ring tail = rings[0];
-        double zt = tail.z - capOffset;
-
-        cap4(buf, tail, zt, UM, U0, U1, false);
-
-        tess.draw();
-    }
-
-    private static double clamp01(double v) {
-        if (v < 0.0) return 0.0;
-        if (v > 1.0) return 1.0;
-        return v;
-    }
-
-    // --- cap helper: makes 4 triangles around the ring into a tip point ---
-    private static void cap4(BufferBuilder buf, Ring r, double zTip, double UM, double U0, double U1, boolean head) {
-        // For correct culling, winding must be CCW when viewed from outside.
-        // Head points +Z, Tail points -Z, so winding flips.
-
-        double uxL = U0, uxR = U1, uxM = UM;
-        double v = r.v;
-
-        if (head) {
-            // Outside is toward +Z
-            tri(buf, 0, r.yT, r.z, uxM, v, r.xR, 0, r.z, uxR, v, 0, 0, zTip, uxM, v);
-            tri(buf, r.xR, 0, r.z, uxR, v, 0, r.yB, r.z, uxM, v, 0, 0, zTip, uxM, v);
-            tri(buf, 0, r.yB, r.z, uxM, v, r.xL, 0, r.z, uxL, v, 0, 0, zTip, uxM, v);
-            tri(buf, r.xL, 0, r.z, uxL, v, 0, r.yT, r.z, uxM, v, 0, 0, zTip, uxM, v);
-        } else {
-            // Outside is toward -Z (flip winding)
-            tri(buf, r.xR, 0, r.z, uxR, v, 0, r.yT, r.z, uxM, v, 0, 0, zTip, uxM, v);
-            tri(buf, 0, r.yT, r.z, uxM, v, r.xL, 0, r.z, uxL, v, 0, 0, zTip, uxM, v);
-            tri(buf, r.xL, 0, r.z, uxL, v, 0, r.yB, r.z, uxM, v, 0, 0, zTip, uxM, v);
-            tri(buf, 0, r.yB, r.z, uxM, v, r.xR, 0, r.z, uxR, v, 0, 0, zTip, uxM, v);
-        }
-    }
-
     public static final class SilhouetteProfile {
         // t: 0 tail .. 1 head
         // v: texture V coordinate per ring (0 top/head .. 1 bottom/tail)
@@ -403,21 +268,6 @@ public final class LoftedBirdMesh {
             this.zT = zT;
             this.wMul = wMul;
             this.tMul = tMul;
-        }
-    }
-
-    private static class Ring {
-        final double z, v;
-        final double xL, xR;
-        final double yT, yB;
-
-        Ring(double z, double v, double halfWidth, double halfThick) {
-            this.z = z;
-            this.v = v;
-            this.xL = -halfWidth;
-            this.xR = +halfWidth;
-            this.yT = +halfThick;
-            this.yB = -halfThick;
         }
     }
 
