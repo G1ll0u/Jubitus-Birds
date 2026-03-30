@@ -32,6 +32,7 @@ public class BirdSpeciesLoader {
     public static void loadAllSpecies() {
         BirdSpeciesRegistry.clear();
         com.jubitus.birds.render.BirdSilhouetteCache.clear();
+        com.jubitus.birds.render.BirdMeshStateCache.clear();
 
         BirdSoundSystem.clearAllSpeciesSounds(); // IMPORTANT: avoid stale keys after reload
 

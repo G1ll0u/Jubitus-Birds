@@ -7,11 +7,6 @@ import net.minecraftforge.common.config.Config;
 @Config(modid = Tags.MOD_ID, name = "jubitusbirds/jubitusbirds")
 public class JubitusBirdsConfig {
 
-
-    @Config.Name("render")
-    public static final Render RENDER = new Render();
-
-
     @Config.Name("borders")
     public static final Borders BORDERS = new Borders();
 
@@ -180,12 +175,21 @@ public class JubitusBirdsConfig {
     public static class Spawning {
 
         @Config.Comment({
+                "Global dimension blacklist.",
+                "Birds will not spawn in these dimension IDs.",
+                "Examples: -1 for Nether, 1 for The End."
+        })
+        public int[] dimensionBlacklist = new int[]{-1, 1};
+
+        @Config.Comment({
                 "Deterministic spawn cell size (in BLOCKS).",
                 "The world is partitioned into cells; each cell may spawn birds/flocks per time window.",
                 "Higher values = fewer spawn checks and broader distribution."
         })
         @Config.RangeInt(min = 16, max = 1024)
         public int spawnCellSize = 128;
+
+
 
         @Config.Comment({
                 "Time window size (in TICKS) for deterministic spawning.",
@@ -202,33 +206,5 @@ public class JubitusBirdsConfig {
         public int spawnRadiusCells = 2;
     }
 
-    public static class Render {
-
-        @Config.Comment({
-                "Bird rendering mode.",
-                "FLAT = old single quad",
-                "LOFTED_3D = low-poly 3D volume using the same texture"
-        })
-        public Mode mode = Mode.LOFTED_3D;
-
-        @Config.Comment({
-                "Only used for LOFTED_3D. Controls overall body thickness (volume).",
-                "Try 0.16 .. 0.35"
-        })
-        @Config.RangeDouble(min = 0.05, max = 0.80)
-        public double loftBaseThickness = 0.22;
-
-        @Config.Comment({
-                "Only used for LOFTED_3D. How pointy head/tail caps are.",
-                "Try 0.03 .. 0.10"
-        })
-        @Config.RangeDouble(min = 0.0, max = 0.30)
-        public double loftCapOffset = 0.06;
-
-        public enum Mode {
-            FLAT,
-            LOFTED_3D
-        }
-    }
 
 }

@@ -303,9 +303,6 @@ public class BirdSoundSystem {
         // track BEFORE playing (so we don't double-start the same tick)
         ACTIVE_BY_BIRD.put(birdId, new ActiveEntry(sound, tick));
 
-        JubitusBirds.LOGGER.info("[JubitusBirds] PLAY request bird={} flock={} type={} event={}",
-                birdId, flockId, type, sound.getSoundLocation());
-
         sh.playSound(sound);
 
         // mark per-flock start tick only if we actually attempted start
@@ -313,8 +310,6 @@ public class BirdSoundSystem {
             LAST_FLOCK_START_TICK.put(flockId, tick);
         }
 
-        JubitusBirds.LOGGER.info("[JubitusBirds] PLAY called; isSoundPlayingNow={}",
-                sh.isSoundPlaying(sound));
     }
 
     // -----------------------
@@ -367,15 +362,12 @@ public class BirdSoundSystem {
                     continue; // still starting/loading; don't drop tracking yet
                 }
 
-                JubitusBirds.LOGGER.warn("[JubitusBirds] SOUND NOT PLAYING (rejected/ended) bird={} event={}",
-                        s.getBirdId(), s.getSoundLocation());
+
                 it.remove();
                 continue;
             }
 
             if (s.isDonePlaying()) {
-                JubitusBirds.LOGGER.info("[JubitusBirds] SOUND DONE bird={} event={}",
-                        s.getBirdId(), s.getSoundLocation());
                 it.remove();
             }
             // ---- Delayed sound plays (used for fake reflections) ----

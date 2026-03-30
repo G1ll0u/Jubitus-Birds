@@ -6,24 +6,27 @@ import com.jubitus.birds.client.util.Flock;
 import com.jubitus.birds.client.util.FlockSpawner;
 import com.jubitus.birds.client.util.SpatialHash;
 import com.jubitus.birds.client.util.spawn.BirdSpawnController;
-import com.jubitus.birds.render.RenderBird;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
-import net.minecraftforge.client.event.RenderWorldLastEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 
 import java.util.*;
 
 public class BirdManager {
+
     public static BirdManager INSTANCE;
+
     private final Map<Long, ClientBird> birdsById = new HashMap<>();
     private final BirdSpawnController spawnController = new BirdSpawnController();
-    // Flocking support
     private final Map<Long, Flock> flocksById = new HashMap<>();
     private final SpatialHash spatial = new SpatialHash(24);
+
+    private WorldClient currentWorld;
+    private int nextRuntimeEntityId = -100000;
 
     public BirdManager() {
         INSTANCE = this;
@@ -36,69 +39,139 @@ public class BirdManager {
         Minecraft mc = Minecraft.getMinecraft();
         World world = mc.world;
         EntityPlayer player = mc.player;
-        if (world == null || player == null) return;
+
+
+
+        if (!(world instanceof WorldClient) || player == null) {
+            if (!birdsById.isEmpty() || currentWorld != null) {
+                clearAllBirds();
+            }
+            currentWorld = null;
+            return;
+        }
+
+        WorldClient worldClient = (WorldClient) world;
+
+        int dim = worldClient.provider.getDimension();
+        if (BirdConfig.isDimensionBlacklisted(dim)) {
+            if (!birdsById.isEmpty()) {
+                clearAllBirds();
+            }
+            return;
+        }
+
+        if (currentWorld != worldClient) {
+            clearAllBirds();
+            currentWorld = worldClient;
+        }
 
         BirdSoundSystem.tickCleanup();
 
-        // --- VIEW BORDER + DESPAWN ---
-        int viewChunks = mc.gameSettings.renderDistanceChunks;
+        purgeDeadAndFar(worldClient, player);
+        rebuildSpatial();
+        tickFlocks(worldClient);
+        cleanupFlocks();
+        spawnMore(worldClient, player);
+
+        BirdSoundSystem.tickCleanup();
+    }
+
+    public void clearAllBirds() {
+        BirdSoundSystem.stopAll();
+
+        if (currentWorld != null) {
+            for (ClientBird bird : birdsById.values()) {
+                if (bird != null) {
+                    currentWorld.removeEntityFromWorld(bird.getEntityId());
+                    bird.setDead();
+                }
+            }
+        }
+
+        birdsById.clear();
+        flocksById.clear();
+        spatial.clear();
+        spawnController.resetAllCooldowns();
+    }
+
+    private void purgeDeadAndFar(WorldClient world, EntityPlayer player) {
+        if (birdsById.isEmpty()) return;
+
+        int viewChunks = Minecraft.getMinecraft().gameSettings.renderDistanceChunks;
         double viewBorder = viewChunks * 16.0;
         double despawnDist = viewBorder + BirdConfig.despawnBorderBuffer;
         double despawnDist2 = despawnDist * despawnDist;
 
-        // --- UPDATE SPATIAL HASH (neighbors) ---
-        spatial.clear();
-        for (ClientBird b : birdsById.values()) {
-            spatial.insert(b);
-        }
-
-        // --- TICK FLOCKS ---
-        for (Flock f : flocksById.values()) {
-            f.tick(world);
-        }
-
-        // --- TICK + DESPAWN BIRDS ---
         Vec3d cam = new Vec3d(player.posX, player.posY + player.getEyeHeight(), player.posZ);
 
         Iterator<Map.Entry<Long, ClientBird>> it = birdsById.entrySet().iterator();
         while (it.hasNext()) {
-            ClientBird b = it.next().getValue();
-
-            Vec3d flockForward = null;
-            if (b.flockId != 0L) {
-                Flock f = flocksById.get(b.flockId);
-                if (f != null) flockForward = f.getGroupForward();
+            ClientBird bird = it.next().getValue();
+            if (bird == null) {
+                it.remove();
+                continue;
             }
 
-            // NEW: neighborRadius per species (still uses spatial hash)
-            double nr = 48.0;
-            if (b.species != null && b.species.flocking != null) {
-                nr = b.species.flocking.neighborRadius;
+            if (bird.isDead || bird.world != world) {
+                BirdSoundSystem.stopForBird(bird.getId());
+                world.removeEntityFromWorld(bird.getEntityId());
+                it.remove();
+                continue;
             }
-            List<ClientBird> neighbors = spatial.queryRadius(b.pos, nr);
 
-            b.tick(world, flockForward, neighbors);
-
-            double d2 = b.pos.squareDistanceTo(cam);
-            if (b.ageTicks > 60 && d2 > despawnDist2) {
-                BirdSoundSystem.stopForBird(b.getId());
+            double d2 = bird.pos.squareDistanceTo(cam);
+            if (bird.ageTicks > 60 && d2 > despawnDist2) {
+                BirdSoundSystem.stopForBird(bird.getId());
+                world.removeEntityFromWorld(bird.getEntityId());
+                bird.setDead();
                 it.remove();
             }
         }
+    }
 
-        cleanupFlocks();
+    private void rebuildSpatial() {
+        spatial.clear();
+        for (ClientBird bird : birdsById.values()) {
+            if (bird != null && !bird.isDead && bird.pos != null) {
+                spatial.insert(bird);
+            }
+        }
+    }
 
-        // --- SPAWN DENSITY CONTROL ---
+    private void tickFlocks(World world) {
+        for (Flock flock : flocksById.values()) {
+            flock.tick(world);
+        }
+    }
+
+    private void cleanupFlocks() {
+        if (flocksById.isEmpty()) return;
+
+        Set<Long> used = new HashSet<>();
+        for (ClientBird bird : birdsById.values()) {
+            if (bird != null && !bird.isDead && bird.flockId != 0L) {
+                used.add(bird.flockId);
+            }
+        }
+
+        flocksById.keySet().removeIf(id -> !used.contains(id));
+    }
+
+    private void spawnMore(WorldClient world, EntityPlayer player) {
         int hardCap = BirdConfig.maxBirdsAroundPlayer;
         if (hardCap <= 0) return;
         if (birdsById.size() >= hardCap) return;
 
         long now = world.getTotalWorldTime();
 
-        // NEW: begin controller tick (global soft target + per-species cap state)
-        spawnController.beginTick(world, player, birdsById, now,
+        spawnController.beginTick(
+                world,
+                player,
+                birdsById,
+                now,
                 BirdConfig.softTargetBirdsAroundPlayer,
-                BirdConfig.maxBirdsAroundPlayer);
+                BirdConfig.maxBirdsAroundPlayer
+        );
 
         long worldSeed = world.getSeed();
         int dim = world.provider.getDimension();
@@ -113,35 +186,25 @@ public class BirdManager {
         int radiusCells = BirdConfig.spawnRadiusCells;
 
         FlockSpawner.SpawnResult sr = FlockSpawner.spawnForCells(
-                world, player, worldSeed, dim, window, cellX, cellZ, radiusCells,
+                world,
+                player,
+                worldSeed,
+                dim,
+                window,
+                cellX,
+                cellZ,
+                radiusCells,
                 spawnController
         );
 
-        // Keep/add flock objects
         flocksById.putAll(sr.flocks);
 
-        for (ClientBird b : sr.birds) {
-            long id = b.getId();
-            if (!birdsById.containsKey(id)) {
-                birdsById.put(id, b);
-                if (birdsById.size() >= hardCap) break;
-            }
+        for (ClientBird bird : sr.birds) {
+            if (bird == null) continue;
+            if (birdsById.containsKey(bird.getId())) continue;
+            if (birdsById.size() >= hardCap) break;
+            addBirdToWorld(world, bird);
         }
-
-        BirdSoundSystem.tickCleanup();
-    }
-
-
-    private void cleanupFlocks() {
-        // Remove flock entries if no birds reference them anymore
-        if (flocksById.isEmpty()) return;
-
-        Set<Long> used = new HashSet<>();
-        for (ClientBird b : birdsById.values()) {
-            if (b.flockId != 0L) used.add(b.flockId);
-        }
-
-        flocksById.keySet().removeIf(id -> !used.contains(id));
     }
 
     private static int floorDiv(int a, int b) {
@@ -150,27 +213,29 @@ public class BirdManager {
         return r;
     }
 
-    @SubscribeEvent
-    public void onRenderWorldLast(RenderWorldLastEvent e) {
-        Minecraft mc = Minecraft.getMinecraft();
-        if (mc == null || mc.world == null || mc.player == null) return;
+    private void addBirdToWorld(WorldClient world, ClientBird bird) {
+        int runtimeId = nextRuntimeEntityId--;
+        if (nextRuntimeEntityId > -1) {
+            nextRuntimeEntityId = -100000;
+        }
 
-        if (mc.currentScreen != null) return;
-
-        RenderBird.renderAll(birdsById.values(), e.getPartialTicks());
+        world.addEntityToWorld(runtimeId, bird);
+        birdsById.put(bird.getId(), bird);
     }
 
-    public void clearAllBirds() {
-        // stop any active bird sounds first
-        BirdSoundSystem.stopAll();
-
-        birdsById.clear();
-        flocksById.clear();
+    public Vec3d getFlockForward(long flockId) {
+        Flock flock = flocksById.get(flockId);
+        return flock != null ? flock.getGroupForward() : null;
     }
 
-    public java.util.Collection<ClientBird> getAllBirdsForDebug() {
+    public List<ClientBird> queryNeighbors(ClientBird bird, double radius) {
+        if (bird == null || bird.pos == null) {
+            return java.util.Collections.emptyList();
+        }
+        return spatial.queryRadius(bird.pos, radius);
+    }
+
+    public Collection<ClientBird> getAllBirdsForDebug() {
         return birdsById.values();
     }
-
-
 }
